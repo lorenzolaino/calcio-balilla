@@ -3,6 +3,8 @@ import sys
 from datetime import datetime
 import streamlit as st
 from sqlalchemy import text
+import pandas as pd
+import altair as alt
 
 from db import get_connection, init_db
 
@@ -51,6 +53,18 @@ def api_storico_partite(limit=50):
 
         return res.fetchall()
 
+def api_elo_history_all():
+    with get_connection() as conn:
+        return pd.read_sql("""
+            SELECT
+                h.created_at,
+                p.name AS player,
+                h.rating
+            FROM player_ratings_history h
+            JOIN players p ON h.player_id = p.id
+            ORDER BY h.created_at
+        """, conn)
+
 # ---------------- DB HELPERS ----------------
 
 def get_or_create_player(conn, name):
@@ -71,6 +85,16 @@ def get_or_create_player(conn, name):
         SELECT id, rating, games, wins, losses, goal_diff
         FROM players WHERE name = :name
     """), {"name": name}).fetchone()
+
+def save_rating_history(conn, player_id, match_id, rating):
+    conn.execute(text("""
+        INSERT INTO player_ratings_history (player_id, match_id, rating)
+        VALUES (:pid, :mid, :rating)
+    """), {
+        "pid": player_id,
+        "mid": match_id,
+        "rating": int(rating)
+    })
 
 # ---------------- ELO LOGIC ----------------
 
@@ -182,6 +206,14 @@ def update_ratings_for_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_
             "da": delta_a, "db": delta_b
         })
 
+        match_id = conn.execute(text("SELECT currval('matches_id_seq')")).scalar()
+
+        save_rating_history(conn, a1_id, match_id, new_a1_rating)
+        save_rating_history(conn, a2_id, match_id, new_a2_rating)
+        save_rating_history(conn, b1_id, match_id, new_b1_rating)
+        save_rating_history(conn, b2_id, match_id, new_b2_rating)
+
+
 # ---------------- STREAMLIT UI ----------------
 
 def run_web_app():
@@ -191,7 +223,7 @@ def run_web_app():
 
     st.sidebar.title("Azioni")
     action = st.sidebar.selectbox(
-        "Scegli", ["Classifica", "Storico Partite", "Aggiungi Giocatore", "Nuova Partita"]
+        "Scegli", ["Classifica", "Storico Partite", "Andamento Elo", "Aggiungi Giocatore", "Nuova Partita"]
     )
 
     if action == "Classifica":
@@ -229,6 +261,23 @@ def run_web_app():
                 }
                 for r in rows
             ])
+    
+    elif action == "Andamento Elo":
+        st.subheader("📈 Andamento Elo giocatori")
+        df = api_elo_history_all()
+
+        if df.empty:
+            st.info("Nessun dato storico disponibile.")
+        else:
+            chart = alt.Chart(df).mark_line(point=True).encode(
+                x=alt.X("created_at:T", title="Data"),
+                y=alt.Y("rating:Q", title="Rating Elo"),
+                color=alt.Color("player:N", title="Giocatore"),
+                tooltip=["player", "rating", "created_at"]
+            ).properties(height=500)
+
+            st.altair_chart(chart, use_container_width=True)
+
 
     elif action == "Aggiungi Giocatore":
         name = st.text_input("Nome giocatore")

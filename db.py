@@ -39,3 +39,13 @@ def init_db():
             delta_b REAL NOT NULL
         );
         """))
+
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS player_ratings_history (
+            id SERIAL PRIMARY KEY,
+            player_id INTEGER REFERENCES players(id),
+            match_id INTEGER REFERENCES matches(id),
+            rating INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        );
+        """))
