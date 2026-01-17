@@ -5,8 +5,8 @@ import streamlit as st
 from sqlalchemy import text
 import pandas as pd
 import altair as alt
-
 from db import get_connection, init_db
+import hashlib
 
 K_FACTOR = 20.0
 
@@ -64,6 +64,22 @@ def api_elo_history_all():
             JOIN players p ON h.player_id = p.id
             ORDER BY h.created_at
         """, conn)
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def check_login(username, password):
+    with get_connection() as conn:
+        row = conn.execute(text("""
+            SELECT u.id, u.username, r.name AS role
+            FROM users u
+            JOIN roles r ON u.role_id = r.id
+            WHERE u.username=:username AND u.password=:password
+        """), {
+            "username": username,
+            "password": hash_password(password)
+        }).fetchone()
+        return row 
 
 # ---------------- DB HELPERS ----------------
 
@@ -219,6 +235,28 @@ def update_ratings_for_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_
 def run_web_app():
     init_db()
 
+    # --- Login / Logout ---
+    if 'user' not in st.session_state:
+        st.session_state['user'] = None
+
+    st.sidebar.title("Account")
+
+    if st.session_state['user'] is None:
+        username = st.sidebar.text_input("Username")
+        password = st.sidebar.text_input("Password", type="password")
+        if st.sidebar.button("Login"):
+            user = check_login(username, password)
+            if user:
+                st.session_state['user'] = {"id": user[0], "username": user[1], "role": user[2]}
+                st.success(f"Benvenuto {user[1]}!")
+            else:
+                st.error("Login fallito")
+    else:
+        st.sidebar.write(f"Logged in as {st.session_state['user']['username']} ({st.session_state['user']['role']})")
+        if st.sidebar.button("Logout"):
+            st.session_state['user'] = None
+            st.experimental_rerun()
+
     st.title("⚽ Calcio Balilla - Classifica Elo")
 
     st.sidebar.title("Azioni")
@@ -278,35 +316,42 @@ def run_web_app():
 
             st.altair_chart(chart, use_container_width=True)
 
-
     elif action == "Aggiungi Giocatore":
-        name = st.text_input("Nome giocatore")
-        if st.button("Aggiungi"):
-            api_add_player(name)
-            st.success(f"Giocatore '{name}' aggiunto")
-            st.rerun()
+        if st.session_state['user'] is None or st.session_state['user']['role'] != 'user':
+            st.warning("Devi essere loggato per aggiungere giocatori")
+        else:
+            name = st.text_input("Nome giocatore")
+            if st.button("Aggiungi"):
+                api_add_player(name)
+                st.success(f"Giocatore '{name}' aggiunto")
+                st.rerun()
 
     elif action == "Nuova Partita":
-        st.subheader("⚽ Nuova Partita 2vs2")
+        if st.session_state['user'] is None or st.session_state['user']['role'] != 'user':
+            st.warning("Devi essere loggato per inserire partite")
+        else:
+            st.subheader("⚽ Inserisci Partita 2vs2")
+            col1, col2 = st.columns(2)
+            with col1:
+                a1 = st.text_input("Giocatore 1 Squadra A")
+                a2 = st.text_input("Giocatore 2 Squadra A")
+            with col2:
+                b1 = st.text_input("Giocatore 1 Squadra B")
+                b2 = st.text_input("Giocatore 2 Squadra B")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            a1 = st.text_input("Giocatore A1")
-            a2 = st.text_input("Giocatore A2")
-        with col2:
-            b1 = st.text_input("Giocatore B1")
-            b2 = st.text_input("Giocatore B2")
+            col3, col4 = st.columns(2)
+            with col3:
+                goals_a = st.number_input("Gol Squadra A", min_value=0, value=10)
+            with col4:
+                goals_b = st.number_input("Gol Squadra B", min_value=0, value=8)
 
-        goals_a = st.number_input("Gol Squadra A", min_value=0, value=10)
-        goals_b = st.number_input("Gol Squadra B", min_value=0, value=8)
-
-        if st.button("Salva Partita"):
-            try:
-                update_ratings_for_match(a1, a2, b1, b2, goals_a, goals_b)
-                st.success("Partita salvata")
-                st.rerun()
-            except ValueError as e:
-                st.error(str(e))
+            if st.button("Salva Partita"):
+                try:
+                    update_ratings_for_match(a1, a2, b1, b2, goals_a, goals_b)
+                    st.success("✅ Partita salvata! Classifica aggiornata.")
+                    st.rerun()
+                except ValueError as e:
+                    st.error(str(e))
 
 if __name__ == "__main__":
     run_web_app()

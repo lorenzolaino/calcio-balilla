@@ -49,3 +49,25 @@ def init_db():
             created_at TIMESTAMP DEFAULT NOW()
         );
         """))
+
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS roles (
+            id SERIAL PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL
+        );
+        """))
+
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL, -- hashata
+            role_id INTEGER REFERENCES roles(id)
+        );
+        """))
+
+        conn.execute(text("""
+        INSERT INTO roles (name) VALUES
+        ('guest'), ('user')
+        ON CONFLICT (name) DO NOTHING;
+        """))
