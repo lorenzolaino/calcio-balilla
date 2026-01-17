@@ -208,3 +208,4 @@ __marimo__/
 
 # Connection to neon database
 .streamlit/secrets.toml
+script
