@@ -27,6 +27,30 @@ def api_add_player(name):
             ON CONFLICT (name) DO NOTHING
         """), {"name": name})
 
+def api_storico_partite(limit=50):
+    with get_connection() as conn:
+        res = conn.execute(text("""
+            SELECT
+                m.date,
+                p1.name AS a1,
+                p2.name AS a2,
+                p3.name AS b1,
+                p4.name AS b2,
+                m.goals_a,
+                m.goals_b,
+                m.delta_a,
+                m.delta_b
+            FROM matches m
+            JOIN players p1 ON m.a1_id = p1.id
+            JOIN players p2 ON m.a2_id = p2.id
+            JOIN players p3 ON m.b1_id = p3.id
+            JOIN players p4 ON m.b2_id = p4.id
+            ORDER BY m.date DESC
+            LIMIT :limit
+        """), {"limit": limit})
+
+        return res.fetchall()
+
 # ---------------- DB HELPERS ----------------
 
 def get_or_create_player(conn, name):
@@ -167,7 +191,7 @@ def run_web_app():
 
     st.sidebar.title("Azioni")
     action = st.sidebar.selectbox(
-        "Scegli", ["Classifica", "Aggiungi Giocatore", "Nuova Partita"]
+        "Scegli", ["Classifica", "Storico Partite", "Aggiungi Giocatore", "Nuova Partita"]
     )
 
     if action == "Classifica":
@@ -185,6 +209,26 @@ def run_web_app():
             }
             for i, r in enumerate(rows)
         ])
+
+    elif action == "Storico Partite":
+        st.subheader("📜 Storico Partite")
+        limit = st.slider("Numero di partite da mostrare", 5, 100, 20)
+        rows = api_storico_partite(limit)
+
+        if not rows:
+            st.info("Nessuna partita registrata.")
+        else:
+            st.table([
+                {
+                    "Data": r[0].strftime("%d/%m/%Y %H:%M"),
+                    "Squadra A": f"{r[1]} + {r[2]}",
+                    "Risultato": f"{r[5]} - {r[6]}",
+                    "Squadra B": f"{r[3]} + {r[4]}",
+                    "Δ Elo A": r[7],
+                    "Δ Elo B": r[8],
+                }
+                for r in rows
+            ])
 
     elif action == "Aggiungi Giocatore":
         name = st.text_input("Nome giocatore")
