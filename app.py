@@ -5,7 +5,7 @@ import streamlit as st
 from sqlalchemy import text
 import pandas as pd
 import altair as alt
-from db import get_connection, init_db
+from db import get_connection, engine, init_db
 import hashlib
 
 K_FACTOR = 20.0
@@ -22,7 +22,7 @@ def api_classifica():
         return res.fetchall()
 
 def api_add_player(name):
-    with get_connection() as conn:
+    with engine.begin() as conn:
         conn.execute(text("""
             INSERT INTO players (name, rating, games, wins, losses, goal_diff)
             VALUES (:name, 1000, 0, 0, 0, 0)
@@ -144,7 +144,7 @@ def update_ratings_for_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_
     if margin < 2:
         raise ValueError("Scarto minimo 2 gol.")
 
-    with get_connection() as conn:
+    with engine.begin() as conn:
         a1 = get_or_create_player(conn, a1_name)
         a2 = get_or_create_player(conn, a2_name)
         b1 = get_or_create_player(conn, b1_name)
