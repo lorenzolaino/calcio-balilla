@@ -81,6 +81,13 @@ def check_login(username, password):
         }).fetchone()
         return row 
 
+def api_get_players_names():
+    with get_connection() as conn:
+        rows = conn.execute(
+            text("SELECT name FROM players ORDER BY name")
+        ).fetchall()
+    return [r[0] for r in rows]
+
 # ---------------- DB HELPERS ----------------
 
 def get_or_create_player(conn, name):
@@ -331,19 +338,29 @@ def run_web_app():
             st.warning("Devi essere loggato per inserire partite")
         else:
             st.subheader("⚽ Inserisci Partita 2vs2")
+            players = api_get_players_names()
+            if len(players) < 4:
+                st.warning("Servono almeno 4 giocatori per inserire una partita.")
+                st.stop()
+                
             col1, col2 = st.columns(2)
             with col1:
-                a1 = st.text_input("Giocatore 1 Squadra A")
-                a2 = st.text_input("Giocatore 2 Squadra A")
+                a1 = st.selectbox("Giocatore 1 Squadra A", players, key="a1")
+                a2 = st.selectbox("Giocatore 2 Squadra A", players, key="a2")
             with col2:
-                b1 = st.text_input("Giocatore 1 Squadra B")
-                b2 = st.text_input("Giocatore 2 Squadra B")
+                b1 = st.selectbox("Giocatore 1 Squadra B", players, key="b1")
+                b2 = st.selectbox("Giocatore 2 Squadra B", players, key="b2")
 
             col3, col4 = st.columns(2)
             with col3:
                 goals_a = st.number_input("Gol Squadra A", min_value=0, value=10)
             with col4:
                 goals_b = st.number_input("Gol Squadra B", min_value=0, value=8)
+
+            selected = {a1, a2, b1, b2}
+            if len(selected) < 4:
+                st.error("Ogni giocatore può comparire una sola volta nella partita.")
+                st.stop()
 
             if st.button("Salva Partita"):
                 try:
