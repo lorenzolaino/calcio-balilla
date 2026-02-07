@@ -314,12 +314,27 @@ def run_web_app():
         if df.empty:
             st.info("Nessun dato storico disponibile.")
         else:
+            selection = alt.selection_point(
+                fields=["player"],
+                bind="legend",
+                toggle=True
+            )
+            
             chart = alt.Chart(df).mark_line(point=True).encode(
                 x=alt.X("created_at:T", title="Data"),
-                y=alt.Y("rating:Q", title="Rating Elo"),
+                y=alt.Y(
+                    "rating:Q", 
+                    scale=alt.Scale(zero=False), 
+                    title="Rating Elo"
+                ),
                 color=alt.Color("player:N", title="Giocatore"),
+                opacity=alt.condition(
+                    selection,
+                    alt.value(1.0),
+                    alt.value(0.05)
+                ),
                 tooltip=["player", "rating", "created_at"]
-            ).properties(height=500)
+            ).add_params(selection).properties(height=500)
 
             st.altair_chart(chart, use_container_width=True)
 
