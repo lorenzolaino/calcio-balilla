@@ -12,6 +12,7 @@ K_FACTOR = 20.0
 
 # ---------------- API ----------------
 
+@st.cache_data
 def api_classifica():
     with get_connection() as conn:
         res = conn.execute(text("""
@@ -28,7 +29,9 @@ def api_add_player(name):
             VALUES (:name, 1000, 0, 0, 0, 0)
             ON CONFLICT (name) DO NOTHING
         """), {"name": name})
+    st.cache_data.clear()
 
+@st.cache_data
 def api_storico_partite(limit=50):
     with get_connection() as conn:
         res = conn.execute(text("""
@@ -53,6 +56,7 @@ def api_storico_partite(limit=50):
 
         return res.fetchall()
 
+@st.cache_data
 def api_elo_history_all():
     with get_connection() as conn:
         return pd.read_sql("""
@@ -81,6 +85,7 @@ def check_login(username, password):
         }).fetchone()
         return row 
 
+@st.cache_data
 def api_get_players_names():
     with get_connection() as conn:
         rows = conn.execute(
@@ -90,34 +95,7 @@ def api_get_players_names():
 
 # ---------------- DB HELPERS ----------------
 
-def get_or_create_player(conn, name):
-    row = conn.execute(text("""
-        SELECT id, rating, games, wins, losses, goal_diff
-        FROM players WHERE name = :name
-    """), {"name": name}).fetchone()
-
-    if row:
-        return row
-
-    conn.execute(text("""
-        INSERT INTO players (name, rating, games, wins, losses, goal_diff)
-        VALUES (:name, 1000, 0, 0, 0, 0)
-    """), {"name": name})
-
-    return conn.execute(text("""
-        SELECT id, rating, games, wins, losses, goal_diff
-        FROM players WHERE name = :name
-    """), {"name": name}).fetchone()
-
-def save_rating_history(conn, player_id, match_id, rating):
-    conn.execute(text("""
-        INSERT INTO player_ratings_history (player_id, match_id, rating)
-        VALUES (:pid, :mid, :rating)
-    """), {
-        "pid": player_id,
-        "mid": match_id,
-        "rating": int(rating)
-    })
+# (Deleted get_or_create_player and save_rating_history as they are now batched in update_ratings_for_match)
 
 # ---------------- ELO LOGIC ----------------
 
@@ -152,18 +130,33 @@ def update_ratings_for_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_
         raise ValueError("Scarto minimo 2 gol.")
 
     with engine.begin() as conn:
-        a1 = get_or_create_player(conn, a1_name)
-        a2 = get_or_create_player(conn, a2_name)
-        b1 = get_or_create_player(conn, b1_name)
-        b2 = get_or_create_player(conn, b2_name)
+        names = [a1_name, a2_name, b1_name, b2_name]
+        res = conn.execute(text("""
+            SELECT id, name, rating, games, wins, losses, goal_diff
+            FROM players WHERE name IN :names
+        """), {"names": tuple(names)})
+        existing = {r.name: list(r) for r in res.fetchall()}
 
-        a1_id, a1_rating, a1_games, a1_wins, a1_losses, a1_gd = a1
-        a2_id, a2_rating, a2_games, a2_wins, a2_losses, a2_gd = a2
-        b1_id, b1_rating, b1_games, b1_wins, b1_losses, b1_gd = b1
-        b2_id, b2_rating, b2_games, b2_wins, b2_losses, b2_gd = b2
+        # ensure all exist
+        players_data = []
+        for name in names:
+            if name not in existing:
+                # Should not happen if selectboxes are used, but for safety:
+                row = conn.execute(text("""
+                    INSERT INTO players (name, rating, games, wins, losses, goal_diff)
+                    VALUES (:name, 1000, 0, 0, 0, 0)
+                    RETURNING id, name, rating, games, wins, losses, goal_diff
+                """), {"name": name}).fetchone()
+                existing[name] = list(row)
+            players_data.append(existing[name])
 
-        r_a = (a1_rating + a2_rating) / 2.0
-        r_b = (b1_rating + b2_rating) / 2.0
+        a1, a2, b1, b2 = players_data
+
+        # a1 format: [id, name, rating, games, wins, losses, goal_diff]
+        # index 0:id, 2:rating, 3:games, 4:wins, 5:losses, 6:goal_diff
+
+        r_a = (a1[2] + a2[2]) / 2.0
+        r_b = (b1[2] + b2[2]) / 2.0
 
         e_a = expected_score(r_a, r_b)
         e_b = expected_score(r_b, r_a)
@@ -176,65 +169,59 @@ def update_ratings_for_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_
         delta_a = round(K_FACTOR * m * (s_a - e_a))
         delta_b = round(K_FACTOR * m * (s_b - e_b))
 
-        new_a1_rating = a1_rating + delta_a
-        new_a2_rating = a2_rating + delta_a
-        new_b1_rating = b1_rating + delta_b
-        new_b2_rating = b2_rating + delta_b
+        a1[2] += delta_a
+        a2[2] += delta_a
+        b1[2] += delta_b
+        b2[2] += delta_b
 
-        a1_games += 1
-        a2_games += 1
-        b1_games += 1
-        b2_games += 1
+        for p in [a1, a2, b1, b2]:
+            p[3] += 1 # games
 
         if s_a == 1:
-            a1_wins += 1
-            a2_wins += 1
-            b1_losses += 1
-            b2_losses += 1
+            a1[4] += 1; a2[4] += 1; b1[5] += 1; b2[5] += 1
         else:
-            b1_wins += 1
-            b2_wins += 1
-            a1_losses += 1
-            a2_losses += 1
+            b1[4] += 1; b2[4] += 1; a1[5] += 1; a2[5] += 1
 
         gd_a = goals_a - goals_b
         gd_b = goals_b - goals_a
 
-        a1_gd += gd_a
-        a2_gd += gd_a
-        b1_gd += gd_b
-        b2_gd += gd_b
+        a1[6] += gd_a; a2[6] += gd_a; b1[6] += gd_b; b2[6] += gd_b
 
-        for pid, rating, games, wins, losses, gd in [
-            (a1_id, new_a1_rating, a1_games, a1_wins, a1_losses, a1_gd),
-            (a2_id, new_a2_rating, a2_games, a2_wins, a2_losses, a2_gd),
-            (b1_id, new_b1_rating, b1_games, b1_wins, b1_losses, b1_gd),
-            (b2_id, new_b2_rating, b2_games, b2_wins, b2_losses, b2_gd),
-        ]:
-            conn.execute(text("""
-                UPDATE players
-                SET rating=:r, games=:g, wins=:w, losses=:l, goal_diff=:gd
-                WHERE id=:id
-            """), {"r": rating, "g": games, "w": wins, "l": losses, "gd": gd, "id": pid})
+        # Batch Update Players
+        update_stmt = text("""
+            UPDATE players
+            SET rating=:r, games=:g, wins=:w, losses=:l, goal_diff=:gd
+            WHERE id=:id
+        """)
+        conn.execute(update_stmt, [
+            {"r": p[2], "g": p[3], "w": p[4], "l": p[5], "gd": p[6], "id": p[0]}
+            for p in [a1, a2, b1, b2]
+        ])
 
-        conn.execute(text("""
+        # Insert Match
+        match_id = conn.execute(text("""
             INSERT INTO matches
             (date, a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, delta_a, delta_b)
             VALUES (:d, :a1, :a2, :b1, :b2, :ga, :gb, :da, :db)
+            RETURNING id
         """), {
             "d": datetime.now(),
-            "a1": a1_id, "a2": a2_id,
-            "b1": b1_id, "b2": b2_id,
+            "a1": a1[0], "a2": a2[0],
+            "b1": b1[0], "b2": b2[0],
             "ga": goals_a, "gb": goals_b,
             "da": delta_a, "db": delta_b
-        })
+        }).scalar()
 
-        match_id = conn.execute(text("SELECT currval('matches_id_seq')")).scalar()
-
-        save_rating_history(conn, a1_id, match_id, new_a1_rating)
-        save_rating_history(conn, a2_id, match_id, new_a2_rating)
-        save_rating_history(conn, b1_id, match_id, new_b1_rating)
-        save_rating_history(conn, b2_id, match_id, new_b2_rating)
+        # Batch Save Rating History
+        conn.execute(text("""
+            INSERT INTO player_ratings_history (player_id, match_id, rating)
+            VALUES (:pid, :mid, :rating)
+        """), [
+            {"pid": p[0], "mid": match_id, "rating": int(p[2])}
+            for p in [a1, a2, b1, b2]
+        ])
+    
+    st.cache_data.clear()
 
 
 # ---------------- STREAMLIT UI ----------------
@@ -274,7 +261,7 @@ def run_web_app():
     if action == "Classifica":
         rows = api_classifica()
         st.subheader("🏆 Classifica")
-        st.table([
+        st.dataframe([
             {
                 "Pos": i + 1,
                 "Giocatore": r[0],
@@ -285,7 +272,7 @@ def run_web_app():
                 "DG": r[5]
             }
             for i, r in enumerate(rows)
-        ])
+        ],hide_index=True)
 
     elif action == "Storico Partite":
         st.subheader("📜 Storico Partite")
