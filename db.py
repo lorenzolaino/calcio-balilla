@@ -1,6 +1,8 @@
 from sqlalchemy import create_engine, text
 import os
 
+import streamlit as st
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 engine = create_engine(
@@ -11,6 +13,7 @@ engine = create_engine(
 def get_connection():
     return engine.connect()
 
+@st.cache_resource
 def init_db():
     with engine.begin() as conn:
         conn.execute(text("""

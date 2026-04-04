@@ -72,6 +72,7 @@ def api_elo_history_all():
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
+@st.cache_data
 def check_login(username, password):
     with get_connection() as conn:
         row = conn.execute(text("""
@@ -269,10 +270,15 @@ def run_web_app():
                 "Partite": r[2],
                 "V": r[3],
                 "S": r[4],
-                "DG": r[5]
+                "DG": r[5],
+                "% Win": (r[3] / r[2] * 100) if r[2] > 0 else 0.0
             }
             for i, r in enumerate(rows)
-        ],hide_index=True)
+        ], hide_index=True, column_config={
+            "% Win": st.column_config.NumberColumn(
+                format="%.1f%%"
+            )
+        })
 
     elif action == "Storico Partite":
         st.subheader("📜 Storico Partite")
