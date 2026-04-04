@@ -9,19 +9,28 @@ mock_st = Mock()
 sys.modules['streamlit'] = mock_st
 
 import app
+from models import DatabaseManager
 
 class TestApp(unittest.TestCase):
 
-    @patch('app.engine')
-    def test_update_ratings_for_match_batches(self, mock_engine):
+    @patch('models.engine')
+    def test_record_match_batches(self, mock_engine):
         # Setup mock connection and engine
         mock_conn = MagicMock()
         mock_engine.begin.return_value.__enter__.return_value = mock_conn
         
         # Mock responses for player fetching
-        class Row(tuple):
-            @property
-            def name(self): return self[1]
+        class Row:
+            def __init__(self, data):
+                self.id = data[0]
+                self.name = data[1]
+                self.rating = data[2]
+                self.games = data[3]
+                self.wins = data[4]
+                self.losses = data[5]
+                self.goal_diff = data[6]
+            def __getitem__(self, i):
+                return [self.id, self.name, self.rating, self.games, self.wins, self.losses, self.goal_diff][i]
 
         mock_player_rows = [
             Row((1, 'A1', 1000, 0, 0, 0, 0)),
@@ -45,7 +54,7 @@ class TestApp(unittest.TestCase):
         mock_conn.execute.side_effect = side_effect
         
         # Run function
-        app.update_ratings_for_match('A1', 'A2', 'B1', 'B2', 10, 8)
+        DatabaseManager.record_match('A1', 'A2', 'B1', 'B2', 10, 8)
         
         # Verify calls
         # Expected: 1 fetch, 1 update (batch), 1 match insert, 1 history insert (batch)
@@ -59,12 +68,12 @@ class TestApp(unittest.TestCase):
 
     def test_caching_applied(self):
         # Check if functions were passed through st.cache_data
-        # In our mock setup, decorators are called during import
-        self.assertTrue(mock_st.cache_data.called)
+        # We check some representative functions in DatabaseManager
+        self.assertTrue(hasattr(DatabaseManager.get_leaderboard, "__wrapped__") or mock_st.cache_data.called)
         
-        # Verify clear is called in api_add_player
-        with patch('app.engine'):
-            app.api_add_player("NewPlayer")
+        # Verify clear is called in add_player
+        with patch('models.engine'):
+            DatabaseManager.add_player("NewPlayer")
             mock_st.cache_data.clear.assert_called()
 
 if __name__ == '__main__':

@@ -1,10 +1,10 @@
 from sqlalchemy import create_engine, text
 import os
-
 import streamlit as st
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# Create a single engine instance
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True
@@ -15,6 +15,7 @@ def get_connection():
 
 @st.cache_resource
 def init_db():
+    """Initializes the database schema if it doesn't exist."""
     with engine.begin() as conn:
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS players (
@@ -64,7 +65,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL, -- hashata
+            password TEXT NOT NULL,
             role_id INTEGER REFERENCES roles(id)
         );
         """))
