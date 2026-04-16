@@ -18,10 +18,10 @@ class DatabaseManager:
     @staticmethod
     @st.cache_data
     def get_leaderboard():
-        """Fetches player statistics ordered by rating."""
+        """Fetches player statistics ordered by rating, using the persistent trend column."""
         with get_connection() as conn:
             query = text("""
-                SELECT name, rating, games, wins, losses, goal_diff
+                SELECT name, rating, games, wins, losses, goal_diff, trend
                 FROM players
                 ORDER BY rating DESC
             """)
@@ -32,8 +32,8 @@ class DatabaseManager:
         """Adds a new player to the database."""
         with engine.begin() as conn:
             query = text("""
-                INSERT INTO players (name, rating, games, wins, losses, goal_diff)
-                VALUES (:name, 1000, 0, 0, 0, 0)
+                INSERT INTO players (name, rating, games, wins, losses, goal_diff, trend)
+                VALUES (:name, 1000, 0, 0, 0, 0, '')
                 ON CONFLICT (name) DO NOTHING
             """)
             conn.execute(query, {"name": name})
@@ -134,7 +134,7 @@ class DatabaseManager:
             names = [a1_name, a2_name, b1_name, b2_name]
             # Fetch existing players
             fetch_query = text("""
-                SELECT id, name, rating, games, wins, losses, goal_diff
+                SELECT id, name, rating, games, wins, losses, goal_diff, trend
                 FROM players WHERE name IN :names
             """)
             res = conn.execute(fetch_query, {"names": tuple(names)})
@@ -145,9 +145,9 @@ class DatabaseManager:
             for name in names:
                 if name not in existing:
                     insert_query = text("""
-                        INSERT INTO players (name, rating, games, wins, losses, goal_diff)
-                        VALUES (:name, 1000, 0, 0, 0, 0)
-                        RETURNING id, name, rating, games, wins, losses, goal_diff
+                        INSERT INTO players (name, rating, games, wins, losses, goal_diff, trend)
+                        VALUES (:name, 1000, 0, 0, 0, 0, '')
+                        RETURNING id, name, rating, games, wins, losses, goal_diff, trend
                     """)
                     row = conn.execute(insert_query, {"name": name}).fetchone()
                     existing[name] = list(row)
@@ -180,14 +180,25 @@ class DatabaseManager:
             gd_a = goals_a - goals_b
             a1[6] += gd_a; a2[6] += gd_a; b1[6] -= gd_a; b2[6] -= gd_a
 
+            # After updating stats and before DB update, calculate trend for each player
+            for i, p in enumerate([a1, a2, b1, b2]):
+                # If player was in Team A (i=0,1) and Team A won, or Team B (i=2,3) and Team B won
+                is_win = (i < 2 and s_a == 1) or (i >= 2 and s_a == 0)
+                res_char = 'V' if is_win else 'S'
+                
+                current_trend = p[7] if p[7] else ""
+                parts = current_trend.split()
+                new_parts = ([res_char] + parts)[:5]
+                p[7] = " ".join(new_parts)
+
             # Batch Update Players in DB
             update_stmt = text("""
                 UPDATE players
-                SET rating=:r, games=:g, wins=:w, losses=:l, goal_diff=:gd
+                SET rating=:r, games=:g, wins=:w, losses=:l, goal_diff=:gd, trend=:t
                 WHERE id=:id
             """)
             conn.execute(update_stmt, [
-                {"r": p[2], "g": p[3], "w": p[4], "l": p[5], "gd": p[6], "id": p[0]}
+                {"r": p[2], "g": p[3], "w": p[4], "l": p[5], "gd": p[6], "t": p[7], "id": p[0]}
                 for p in [a1, a2, b1, b2]
             ])
 

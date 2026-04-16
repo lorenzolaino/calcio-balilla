@@ -60,7 +60,8 @@ def run_web_app():
                 "V": player[3],
                 "S": player[4],
                 "DG": player[5],
-                "% Win": (player[3] / player[2] * 100) if player[2] > 0 else 0.0
+                "% Win": (player[3] / player[2] * 100) if player[2] > 0 else 0.0,
+                "Trend": player[6] if player[6] else "-"
             }
             for index, player in enumerate(leaderboard_data)
         ], hide_index=True, column_config={

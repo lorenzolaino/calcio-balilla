@@ -25,7 +25,8 @@ def init_db():
             games INTEGER NOT NULL DEFAULT 0,
             wins INTEGER NOT NULL DEFAULT 0,
             losses INTEGER NOT NULL DEFAULT 0,
-            goal_diff INTEGER NOT NULL DEFAULT 0
+            goal_diff INTEGER NOT NULL DEFAULT 0,
+            trend TEXT
         );
         """))
 
@@ -52,6 +53,10 @@ def init_db():
             rating INTEGER NOT NULL,
             created_at TIMESTAMP DEFAULT NOW()
         );
+        """))
+
+        conn.execute(text("""
+        ALTER TABLE players ADD COLUMN IF NOT EXISTS trend TEXT DEFAULT '';
         """))
 
         conn.execute(text("""
