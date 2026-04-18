@@ -40,20 +40,30 @@ def init_db():
             b2_id INTEGER REFERENCES players(id),
             goals_a INTEGER NOT NULL,
             goals_b INTEGER NOT NULL,
-            delta_a REAL NOT NULL,
-            delta_b REAL NOT NULL
+            delta_a1 REAL NOT NULL DEFAULT 0,
+            delta_a2 REAL NOT NULL DEFAULT 0,
+            delta_b1 REAL NOT NULL DEFAULT 0,
+            delta_b2 REAL NOT NULL DEFAULT 0
         );
         """))
+
+        # Add individual delta columns if they don't exist
+        for col in ["delta_a1", "delta_a2", "delta_b1", "delta_b2"]:
+            conn.execute(text(f"ALTER TABLE matches ADD COLUMN IF NOT EXISTS {col} REAL DEFAULT 0;"))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS player_ratings_history (
             id SERIAL PRIMARY KEY,
             player_id INTEGER REFERENCES players(id),
             match_id INTEGER REFERENCES matches(id),
-            rating INTEGER NOT NULL,
+            rating REAL NOT NULL,
             created_at TIMESTAMP DEFAULT NOW()
         );
         """))
+
+        conn.execute(text("""
+        ALTER TABLE player_ratings_history ALTER COLUMN rating TYPE REAL;
+        """).execution_options(autocommit=True))
 
         conn.execute(text("""
         ALTER TABLE players ADD COLUMN IF NOT EXISTS trend TEXT DEFAULT '';

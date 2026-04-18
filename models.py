@@ -5,8 +5,6 @@ from sqlalchemy import text
 import streamlit as st
 from db import get_connection, engine
 
-K_FACTOR = 20.0
-
 class DatabaseManager:
     """Manages all database interactions and business logic for the application."""
 
@@ -42,7 +40,7 @@ class DatabaseManager:
     @staticmethod
     @st.cache_data
     def get_match_history(limit=50):
-        """Fetches the history of played matches."""
+        """Fetches the history of played matches with both team and individual deltas."""
         with get_connection() as conn:
             query = text("""
                 SELECT
@@ -53,6 +51,10 @@ class DatabaseManager:
                     p4.name AS b2,
                     m.goals_a,
                     m.goals_b,
+                    m.delta_a1,
+                    m.delta_a2,
+                    m.delta_b1,
+                    m.delta_b2,
                     m.delta_a,
                     m.delta_b
                 FROM matches m
@@ -122,6 +124,13 @@ class DatabaseManager:
             return 1.8
 
     @staticmethod
+    def _get_k_factor(games):
+        """Returns a dynamic K-factor that decreases continuously as games increase."""
+        # Starts at 30.0, drops to 20.0 at 40 games, ~15 at 120 games.
+        # Asymptotic to 10.0
+        return 10.0 + (20.0 / (1.0 + (games / 40.0)))
+
+    @staticmethod
     def record_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_b):
         """Records a new match, updates player ratings, and saves history."""
         if goals_a == goals_b:
@@ -132,6 +141,12 @@ class DatabaseManager:
 
         with engine.begin() as conn:
             names = [a1_name, a2_name, b1_name, b2_name]
+            
+            # Get rating range for farming threshold
+            range_res = conn.execute(text("SELECT MAX(rating), MIN(rating) FROM players")).fetchone()
+            max_r, min_r = range_res if range_res and range_res[0] is not None else (1000, 1000)
+            rating_diff_threshold = (max_r - min_r) * 0.5 # Threshold set to 50% of the total rating spread
+
             # Fetch existing players
             fetch_query = text("""
                 SELECT id, name, rating, games, wins, losses, goal_diff, trend
@@ -162,12 +177,28 @@ class DatabaseManager:
             s_a = 1.0 if goals_a > goals_b else 0.0
             m = DatabaseManager._margin_multiplier(margin)
 
-            delta_a = round(K_FACTOR * m * (s_a - e_a))
-            delta_b = -delta_a  # Zero-sum game logic
+            # Farming prevention logic
+            multiplier = 1.0
+            team_diff = r_a - r_b
+            is_a_favored = team_diff > 0
+            
+            if abs(team_diff) > rating_diff_threshold:
+                if (is_a_favored and s_a == 1.0) or (not is_a_favored and s_a == 0.0):
+                    # Favored team wins: halved points
+                    multiplier = 0.5
+                else:
+                    # Favored team loses: increased points (penalty)
+                    multiplier = 1.5
+
+            # Individual deltas based on player's own K-factor
+            delta_a1 = round(DatabaseManager._get_k_factor(a1[3]) * m * multiplier * (s_a - e_a), 1)
+            delta_a2 = round(DatabaseManager._get_k_factor(a2[3]) * m * multiplier * (s_a - e_a), 1)
+            delta_b1 = round(DatabaseManager._get_k_factor(b1[3]) * m * multiplier * ((1-s_a) - (1-e_a)), 1)
+            delta_b2 = round(DatabaseManager._get_k_factor(b2[3]) * m * multiplier * ((1-s_a) - (1-e_a)), 1)
 
             # Update in-memory player data
-            a1[2] += delta_a; a2[2] += delta_a
-            b1[2] += delta_b; b2[2] += delta_b
+            a1[2] += delta_a1; a2[2] += delta_a2
+            b1[2] += delta_b1; b2[2] += delta_b2
 
             for p in [a1, a2, b1, b2]:
                 p[3] += 1  # games count
@@ -184,7 +215,7 @@ class DatabaseManager:
             for i, p in enumerate([a1, a2, b1, b2]):
                 # If player was in Team A (i=0,1) and Team A won, or Team B (i=2,3) and Team B won
                 is_win = (i < 2 and s_a == 1) or (i >= 2 and s_a == 0)
-                res_char = 'V' if is_win else 'S'
+                res_char = 'W' if is_win else 'L'
                 
                 current_trend = p[7] if p[7] else ""
                 parts = current_trend.split()
@@ -205,8 +236,8 @@ class DatabaseManager:
             # Insert Match record
             match_insert = text("""
                 INSERT INTO matches
-                (date, a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, delta_a, delta_b)
-                VALUES (:d, :a1, :a2, :b1, :b2, :ga, :gb, :da, :db)
+                (date, a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, delta_a1, delta_a2, delta_b1, delta_b2)
+                VALUES (:d, :a1, :a2, :b1, :b2, :ga, :gb, :da1, :da2, :db1, :db2)
                 RETURNING id
             """)
             match_id = conn.execute(match_insert, {
@@ -214,7 +245,8 @@ class DatabaseManager:
                 "a1": a1[0], "a2": a2[0],
                 "b1": b1[0], "b2": b2[0],
                 "ga": goals_a, "gb": goals_b,
-                "da": delta_a, "db": delta_b
+                "da1": delta_a1, "da2": delta_a2,
+                "db1": delta_b1, "db2": delta_b2
             }).scalar()
 
             # Batch Save Rating History in DB
