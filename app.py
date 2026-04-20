@@ -133,19 +133,26 @@ def run_web_app():
         else:
             table_rows = []
             for record in history_data:
-                # Logic: if individual deltas are all 0, it's an old match
-                is_new_match = any([record[7], record[8], record[9], record[10]])
+                # A match is "new" if team deltas (delta_a/b) are NULL (None)
+                is_new_match = record[11] is None
                 
                 if is_new_match:
-                    team_a = f"{record[1]} ({record[7]:+g}) + {record[2]} ({record[8]:+g})"
-                    team_b = f"{record[3]} ({record[9]:+g}) + {record[4]} ({record[10]:+g})"
+                    # New matches: show individual deltas next to names
+                    da1 = f"{record[7]:+g}" if record[7] is not None else "+0"
+                    da2 = f"{record[8]:+g}" if record[8] is not None else "+0"
+                    db1 = f"{record[9]:+g}" if record[9] is not None else "+0"
+                    db2 = f"{record[10]:+g}" if record[10] is not None else "+0"
+                    
+                    team_a = f"{record[1]} ({da1}) + {record[2]} ({da2})"
+                    team_b = f"{record[3]} ({db1}) + {record[4]} ({db2})"
                     delta_a_display = "-"
                     delta_b_display = "-"
                 else:
+                    # Old matches: show team deltas in the dedicated columns
                     team_a = f"{record[1]} + {record[2]}"
                     team_b = f"{record[3]} + {record[4]}"
-                    delta_a_display = f"{record[11]:+g}"
-                    delta_b_display = f"{record[12]:+g}"
+                    delta_a_display = f"{record[11]:+g}" if record[11] is not None else "-"
+                    delta_b_display = f"{record[12]:+g}" if record[12] is not None else "-"
 
                 table_rows.append({
                     "Date": record[0].strftime("%d/%m/%Y %H:%M"),

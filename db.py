@@ -51,6 +51,10 @@ def init_db():
         for col in ["delta_a1", "delta_a2", "delta_b1", "delta_b2"]:
             conn.execute(text(f"ALTER TABLE matches ADD COLUMN IF NOT EXISTS {col} REAL DEFAULT 0;"))
 
+        # Fix: Drop NOT NULL constraint for team deltas to support new matches
+        conn.execute(text("ALTER TABLE matches ALTER COLUMN delta_a DROP NOT NULL;"))
+        conn.execute(text("ALTER TABLE matches ALTER COLUMN delta_b DROP NOT NULL;"))
+
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS player_ratings_history (
             id SERIAL PRIMARY KEY,
