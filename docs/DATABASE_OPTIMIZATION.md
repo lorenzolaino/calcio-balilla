@@ -61,7 +61,7 @@ BEGIN
         wins = wins + (CASE WHEN s_a = 1.0 THEN 1 ELSE 0 END),
         losses = losses + (CASE WHEN s_a = 0.0 THEN 1 ELSE 0 END),
         goal_diff = goal_diff + (NEW.goals_a - NEW.goals_b),
-        trend = LEFT(TRIM(LEADING ' ' FROM (CASE WHEN s_a = 1.0 THEN 'V ' ELSE 'S ' END) || COALESCE(trend, '')), 9)
+        trend = LEFT(TRIM(LEADING ' ' FROM (CASE WHEN s_a = 1.0 THEN 'W ' ELSE 'L ' END) || COALESCE(trend, '')), 9)
     WHERE id IN (NEW.a1_id, NEW.a2_id);
 
     -- 5. Update Players (Team B)
@@ -71,7 +71,7 @@ BEGIN
         wins = wins + (CASE WHEN s_a = 0.0 THEN 1 ELSE 0 END),
         losses = losses + (CASE WHEN s_a = 1.0 THEN 1 ELSE 0 END),
         goal_diff = goal_diff - (NEW.goals_a - NEW.goals_b),
-        trend = LEFT(TRIM(LEADING ' ' FROM (CASE WHEN s_a = 0.0 THEN 'V ' ELSE 'S ' END) || COALESCE(trend, '')), 9)
+        trend = LEFT(TRIM(LEADING ' ' FROM (CASE WHEN s_a = 0.0 THEN 'W ' ELSE 'L ' END) || COALESCE(trend, '')), 9)
     WHERE id IN (NEW.b1_id, NEW.b2_id);
 
     -- 6. Insert History (Example for one player)

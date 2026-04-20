@@ -73,6 +73,12 @@ def init_db():
         ALTER TABLE players ADD COLUMN IF NOT EXISTS trend TEXT DEFAULT '';
         """))
 
+        # Migrate existing trend values from V/S to W/L
+        conn.execute(text("""
+        UPDATE players SET trend = REPLACE(REPLACE(trend, 'V', 'W'), 'S', 'L')
+        WHERE trend LIKE '%V%' OR trend LIKE '%S%';
+        """))
+
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS roles (
             id SERIAL PRIMARY KEY,
