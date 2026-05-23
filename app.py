@@ -13,9 +13,9 @@ def show_release_notes():
     ### Version {CURRENT_VERSION}
     Welcome to the new update!
     
-    **Match Deletion**:
-    *   Admins can now delete one or more matches from the history using the new **"Delete Match"** menu.
-    *   The system will automatically restore the points for the involved players and remove the match from the history and trends.
+    **New Features**:
+    1.  **Match Deletion**: You can now delete incorrect matches and the system will automatically restore player points and trends.
+    2.  **Player Search in History**: Filter the match history to see only matches involving a specific player.
     """)
     if st.button("Got it!"):
         st.session_state['notes_dismissed'] = True
@@ -120,8 +120,17 @@ def run_web_app():
 
     elif action == "Match History":
         st.subheader("📜 Match History")
+        
+        # Player filter
+        players_data = DatabaseManager.get_player_names()
+        player_options = ["All Players"] + [p[1] for p in players_data]
+        player_map = {p[1]: p[0] for p in players_data}
+        
+        selected_player_name = st.selectbox("Filter by Player", player_options)
+        selected_player_id = player_map.get(selected_player_name)
+        
         limit = st.slider("Number of matches to show", 5, 100, 20)
-        history_data = DatabaseManager.get_match_history(limit)
+        history_data = DatabaseManager.get_match_history(limit, player_id=selected_player_id)
 
         if not history_data:
             st.info("No matches recorded.")
@@ -206,7 +215,9 @@ def run_web_app():
             st.warning("You must be logged in to record matches")
         else:
             st.subheader("⚽ Record 2vs2 Match")
-            players_list = DatabaseManager.get_player_names()
+            players_data = DatabaseManager.get_player_names()
+            players_list = [p[1] for p in players_data]
+            
             if len(players_list) < 4:
                 st.warning("At least 4 players are required to record a match.")
                 st.stop()

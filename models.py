@@ -39,10 +39,10 @@ class DatabaseManager:
 
     @staticmethod
     @st.cache_data
-    def get_match_history(limit=50):
-        """Fetches the history of played matches with both team and individual deltas."""
+    def get_match_history(limit=50, player_id=None):
+        """Fetches the history of played matches, optionally filtered by player_id."""
         with get_connection() as conn:
-            query = text("""
+            query_str = """
                 SELECT
                     m.date,
                     p1.name AS a1,
@@ -63,10 +63,18 @@ class DatabaseManager:
                 JOIN players p2 ON m.a2_id = p2.id
                 JOIN players p3 ON m.b1_id = p3.id
                 JOIN players p4 ON m.b2_id = p4.id
-                ORDER BY m.date DESC
-                LIMIT :limit
-            """)
-            return conn.execute(query, {"limit": limit}).fetchall()
+            """
+            params = {"limit": limit}
+            
+            if player_id:
+                query_str += """
+                    WHERE m.a1_id = :pid OR m.a2_id = :pid OR m.b1_id = :pid OR m.b2_id = :pid
+                """
+                params["pid"] = player_id
+                
+            query_str += " ORDER BY m.date DESC LIMIT :limit"
+            
+            return conn.execute(text(query_str), params).fetchall()
 
     @staticmethod
     @st.cache_data
@@ -103,11 +111,11 @@ class DatabaseManager:
     @staticmethod
     @st.cache_data
     def get_player_names():
-        """Fetches names of all registered players."""
+        """Fetches IDs and names of all registered players."""
         with get_connection() as conn:
-            query = text("SELECT name FROM players ORDER BY name")
+            query = text("SELECT id, name FROM players ORDER BY name")
             rows = conn.execute(query).fetchall()
-        return [r[0] for r in rows]
+        return [(r[0], r[1]) for r in rows]
 
     @staticmethod
     def _expected_score(r_team, r_opp):
