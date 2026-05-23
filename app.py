@@ -5,22 +5,17 @@ from db import init_db
 from models import DatabaseManager
 from streamlit_js_eval import streamlit_js_eval
 
-CURRENT_VERSION = "1.1.0"
+CURRENT_VERSION = "1.2.0"
 
 @st.dialog("🚀 What's New")
 def show_release_notes():
     st.markdown(f"""
     ### Version {CURRENT_VERSION}
-    Welcome to the new update! Here are the main changes:
+    Welcome to the new update!
     
-    1.  **Advanced Scoring Algorithm**:
-        *   **Continuous K-Factor**: Your score now adapts constantly to your experience. The more you play, the more stable your rating becomes, without abrupt jumps.
-        *   **Individual Scoring**: Each player receives points based on their own experience level. Teammates can now get different points in the same match!
-    2.  **Anti-Farming System**:
-        *   Dynamic threshold introduced (50% of the total leaderboard spread).
-        *   Unbalanced matches are penalized: favored team win = halved points; favored team loss = heavy penalty (+50%).
-        *   "Underdogs" are protected: they lose fewer points against top players and gain much more if they pull off an upset.
-    3.  **Decimal Precision**: Scores now show one decimal place to accurately reflect small changes and individual differences.
+    **Match Deletion**:
+    *   Admins can now delete one or more matches from the history using the new **"Delete Match"** menu.
+    *   The system will automatically restore the points for the involved players and remove the match from the history and trends.
     """)
     if st.button("Got it!"):
         st.session_state['notes_dismissed'] = True
@@ -98,7 +93,7 @@ def run_web_app():
     st.sidebar.title("Actions")
     action = st.sidebar.selectbox(
         "Choose", 
-        ["Leaderboard", "Match History", "Elo Trends", "Add Player", "New Match"]
+        ["Leaderboard", "Match History", "Elo Trends", "Add Player", "New Match", "Delete Match"]
     )
 
     if action == "Leaderboard":
@@ -242,6 +237,44 @@ def run_web_app():
                     st.rerun()
                 except ValueError as error:
                     st.error(str(error))
+
+    elif action == "Delete Match":
+        if st.session_state['user'] is None or st.session_state['user']['role'] != 'user':
+            st.warning("You must be logged in to delete matches")
+        else:
+            st.subheader("🗑️ Delete Match")
+            limit = st.slider("Number of matches to search from", 5, 100, 20)
+            history_data = DatabaseManager.get_match_history(limit)
+
+            if not history_data:
+                st.info("No matches recorded.")
+            else:
+                match_options = []
+                match_map = {}
+                for record in history_data:
+                    # record index 13 is the id (added in DatabaseManager.get_match_history)
+                    label = f"[{record[0].strftime('%d/%m/%Y %H:%M')}] {record[1]}+{record[2]} vs {record[3]}+{record[4]} ({record[5]}-{record[6]})"
+                    match_options.append(label)
+                    match_map[label] = record[13]
+
+                selected_match_labels = st.multiselect("Select matches to delete", match_options)
+                
+                if st.button("Delete Selected Matches", type="primary"):
+                    if not selected_match_labels:
+                        st.warning("Please select at least one match to delete.")
+                    else:
+                        success_count = 0
+                        for label in selected_match_labels:
+                            match_id = match_map[label]
+                            if DatabaseManager.delete_match(match_id):
+                                success_count += 1
+                        
+                        if success_count == len(selected_match_labels):
+                            st.success(f"✅ {success_count} matches deleted and stats restored!")
+                            st.rerun()
+                        else:
+                            st.warning(f"⚠️ {success_count} of {len(selected_match_labels)} matches deleted.")
+                            st.rerun()
 
 if __name__ == "__main__":
     run_web_app()

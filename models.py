@@ -56,7 +56,8 @@ class DatabaseManager:
                     m.delta_b1,
                     m.delta_b2,
                     m.delta_a,
-                    m.delta_b
+                    m.delta_b,
+                    m.id
                 FROM matches m
                 JOIN players p1 ON m.a1_id = p1.id
                 JOIN players p2 ON m.a2_id = p2.id
@@ -129,6 +130,98 @@ class DatabaseManager:
         # Starts at 30.0, drops to 20.0 at 40 games, ~15 at 120 games.
         # Asymptotic to 10.0
         return 10.0 + (20.0 / (1.0 + (games / 40.0)))
+
+    @staticmethod
+    def delete_match(match_id):
+        """Deletes a match and restores player stats efficiently."""
+        with engine.begin() as conn:
+            # 1. Get match details
+            match_query = text("""
+                SELECT a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, 
+                       delta_a1, delta_a2, delta_b1, delta_b2 
+                FROM matches WHERE id = :mid
+            """)
+            match = conn.execute(match_query, {"mid": match_id}).fetchone()
+            if not match:
+                return False
+
+            m = match._asdict() if hasattr(match, "_asdict") else match._mapping
+            player_ids = [m["a1_id"], m["a2_id"], m["b1_id"], m["b2_id"]]
+
+            # 2. Fetch all involved players in one call
+            players_res = conn.execute(
+                text("SELECT id, rating, games, wins, losses, goal_diff FROM players WHERE id IN :ids"),
+                {"ids": tuple(player_ids)}
+            ).fetchall()
+            players = {p.id: list(p) for p in players_res}
+
+            # 3. Calculate restored stats in memory
+            # Map player ID to their role/delta for this match
+            roles = [
+                (m["a1_id"], m["delta_a1"], m["goals_a"] > m["goals_b"], m["goals_a"] - m["goals_b"]),
+                (m["a2_id"], m["delta_a2"], m["goals_a"] > m["goals_b"], m["goals_a"] - m["goals_b"]),
+                (m["b1_id"], m["delta_b1"], m["goals_b"] > m["goals_a"], m["goals_b"] - m["goals_a"]),
+                (m["b2_id"], m["delta_b2"], m["goals_b"] > m["goals_a"], m["goals_b"] - m["goals_a"]),
+            ]
+
+            for pid, delta, is_win, gd_contrib in roles:
+                p = players[pid]
+                p[1] -= delta        # rating
+                p[2] -= 1            # games
+                if is_win:
+                    p[3] -= 1        # wins
+                else:
+                    p[4] -= 1        # losses
+                p[5] -= gd_contrib   # goal_diff
+
+            # 4. Get new trends for all players in one call
+            trend_query = text("""
+                SELECT pid, STRING_AGG(result, ' ') WITHIN GROUP (ORDER BY date DESC) as trend
+                FROM (
+                    SELECT 
+                        p.id as pid,
+                        m.date,
+                        CASE 
+                            WHEN (m.a1_id = p.id OR m.a2_id = p.id) AND m.goals_a > m.goals_b THEN 'W'
+                            WHEN (m.b1_id = p.id OR m.b2_id = p.id) AND m.goals_b > m.goals_a THEN 'W'
+                            ELSE 'L'
+                        END as result,
+                        ROW_NUMBER() OVER (PARTITION BY p.id ORDER BY m.date DESC) as rn
+                    FROM players p
+                    JOIN matches m ON m.a1_id = p.id OR m.a2_id = p.id OR m.b1_id = p.id OR m.b2_id = p.id
+                    WHERE p.id IN :ids AND m.id != :mid
+                ) t 
+                WHERE rn <= 5
+                GROUP BY pid
+            """)
+            trends_res = conn.execute(trend_query, {"ids": tuple(player_ids), "mid": match_id}).fetchall()
+            trends = {t.pid: t.trend for t in trends_res}
+
+            # 5. Batch Update Players
+            update_stmt = text("""
+                UPDATE players
+                SET rating=:r, games=:g, wins=:w, losses=:l, goal_diff=:gd, trend=:t
+                WHERE id=:id
+            """)
+            conn.execute(update_stmt, [
+                {
+                    "r": players[pid][1], 
+                    "g": players[pid][2], 
+                    "w": players[pid][3], 
+                    "l": players[pid][4], 
+                    "gd": players[pid][5], 
+                    "t": trends.get(pid, ""),
+                    "id": pid
+                }
+                for pid in player_ids
+            ])
+
+            # 6. Delete match and history
+            conn.execute(text("DELETE FROM player_ratings_history WHERE match_id = :mid"), {"mid": match_id})
+            conn.execute(text("DELETE FROM matches WHERE id = :mid"), {"mid": match_id})
+
+        st.cache_data.clear()
+        return True
 
     @staticmethod
     def record_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_b):
