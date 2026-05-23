@@ -3,9 +3,13 @@ from unittest.mock import MagicMock, patch, Mock
 import sys
 import os
 
-# Mock Streamlit and setup environment
+# Mock Streamlit BEFORE importing DatabaseManager
 os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost/db"
-mock_st = Mock()
+mock_st = MagicMock()
+# Mock the cache decorator to return the function itself and support .clear()
+def mock_cache(func): return func
+mock_st.cache_data = mock_cache
+mock_st.cache_data.clear = MagicMock()
 sys.modules['streamlit'] = mock_st
 
 from models import DatabaseManager

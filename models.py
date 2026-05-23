@@ -16,11 +16,12 @@ class DatabaseManager:
     @staticmethod
     @st.cache_data
     def get_leaderboard():
-        """Fetches player statistics ordered by rating, using the persistent trend column."""
+        """Fetches active player statistics ordered by rating, using the persistent trend column."""
         with get_connection() as conn:
             query = text("""
                 SELECT name, rating, games, wins, losses, goal_diff, trend
                 FROM players
+                WHERE is_active = TRUE
                 ORDER BY rating DESC
             """)
             return conn.execute(query).fetchall()
@@ -30,11 +31,19 @@ class DatabaseManager:
         """Adds a new player to the database."""
         with engine.begin() as conn:
             query = text("""
-                INSERT INTO players (name, rating, games, wins, losses, goal_diff, trend)
-                VALUES (:name, 1000, 0, 0, 0, 0, '')
-                ON CONFLICT (name) DO NOTHING
+                INSERT INTO players (name, rating, games, wins, losses, goal_diff, trend, is_active)
+                VALUES (:name, 1000, 0, 0, 0, 0, '', TRUE)
+                ON CONFLICT (name) DO UPDATE SET is_active = TRUE
             """)
             conn.execute(query, {"name": name})
+        st.cache_data.clear()
+
+    @staticmethod
+    def toggle_player_status(player_id: int, is_active: bool):
+        """Toggles a player's active status."""
+        with engine.begin() as conn:
+            query = text("UPDATE players SET is_active = :status WHERE id = :pid")
+            conn.execute(query, {"status": is_active, "pid": player_id})
         st.cache_data.clear()
 
     @staticmethod
@@ -111,11 +120,19 @@ class DatabaseManager:
     @staticmethod
     @st.cache_data
     def get_player_names():
-        """Fetches IDs and names of all registered players."""
+        """Fetches IDs and names of all active registered players."""
         with get_connection() as conn:
-            query = text("SELECT id, name FROM players ORDER BY name")
+            query = text("SELECT id, name FROM players WHERE is_active = TRUE ORDER BY name")
             rows = conn.execute(query).fetchall()
         return [(r[0], r[1]) for r in rows]
+
+    @staticmethod
+    @st.cache_data
+    def get_all_players():
+        """Fetches all players (active and inactive) for management."""
+        with get_connection() as conn:
+            query = text("SELECT id, name, is_active FROM players ORDER BY name")
+            return conn.execute(query).fetchall()
 
     @staticmethod
     def _expected_score(r_team, r_opp):

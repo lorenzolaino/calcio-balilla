@@ -26,9 +26,13 @@ def init_db():
             wins INTEGER NOT NULL DEFAULT 0,
             losses INTEGER NOT NULL DEFAULT 0,
             goal_diff INTEGER NOT NULL DEFAULT 0,
-            trend TEXT
+            trend TEXT,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE
         );
         """))
+
+        # Add is_active column if it doesn't exist
+        conn.execute(text("ALTER TABLE players ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;"))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS matches (

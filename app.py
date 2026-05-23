@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import streamlit as st
 import altair as alt
+import pandas as pd
 from db import init_db
 from models import DatabaseManager
 from streamlit_js_eval import streamlit_js_eval
@@ -14,8 +15,9 @@ def show_release_notes():
     Welcome to the new update!
     
     **New Features**:
-    1.  **Match Deletion**: You can now delete incorrect matches and the system will automatically restore player points and trends.
+    1.  **Match Deletion**: Delete incorrect matches with automatic point and trend restoration.
     2.  **Player Search in History**: Filter the match history to see only matches involving a specific player.
+    3.  **Player Management**: The "Add Player" menu is now **"Manage Players"**, where you can also **Deactivate** players while preserving their history.
     """)
     if st.button("Got it!"):
         st.session_state['notes_dismissed'] = True
@@ -93,7 +95,7 @@ def run_web_app():
     st.sidebar.title("Actions")
     action = st.sidebar.selectbox(
         "Choose", 
-        ["Leaderboard", "Match History", "Elo Trends", "Add Player", "New Match", "Delete Match"]
+        ["Leaderboard", "Match History", "Elo Trends", "Manage Players", "New Match", "Delete Match"]
     )
 
     if action == "Leaderboard":
@@ -121,10 +123,10 @@ def run_web_app():
     elif action == "Match History":
         st.subheader("📜 Match History")
         
-        # Player filter
-        players_data = DatabaseManager.get_player_names()
-        player_options = ["All Players"] + [p[1] for p in players_data]
-        player_map = {p[1]: p[0] for p in players_data}
+        # Player filter (include all players so history can be searched for inactive ones)
+        all_players_data = DatabaseManager.get_all_players()
+        player_options = ["All Players"] + [p[1] for p in all_players_data]
+        player_map = {p[1]: p[0] for p in all_players_data}
         
         selected_player_name = st.selectbox("Filter by Player", player_options)
         selected_player_id = player_map.get(selected_player_name)
@@ -200,15 +202,59 @@ def run_web_app():
 
             st.altair_chart(chart, use_container_width=True)
 
-    elif action == "Add Player":
+    elif action == "Manage Players":
         if st.session_state['user'] is None or st.session_state['user']['role'] != 'user':
-            st.warning("You must be logged in to add players")
+            st.warning("You must be logged in to manage players")
         else:
-            player_name = st.text_input("Player Name")
-            if st.button("Add"):
-                DatabaseManager.add_player(player_name)
-                st.success(f"Player '{player_name}' added")
-                st.rerun()
+            st.subheader("👥 Manage Players")
+            
+            # --- Add Player Section ---
+            with st.expander("➕ Add New Player"):
+                new_player_name = st.text_input("Player Name")
+                if st.button("Add"):
+                    if new_player_name:
+                        DatabaseManager.add_player(new_player_name)
+                        st.success(f"Player '{new_player_name}' added/reactivated")
+                        st.rerun()
+                    else:
+                        st.error("Please enter a name")
+
+            st.divider()
+
+            # --- Player Status Management ---
+            st.write("Toggle player active status (Inactive players are hidden from Leaderboard and New Match selection)")
+            all_players = DatabaseManager.get_all_players()
+            
+            if not all_players:
+                st.info("No players registered.")
+            else:
+                # Prepare data for display
+                df_players = pd.DataFrame(all_players, columns=["ID", "Name", "Active"])
+                
+                # Display editable dataframe
+                edited_df = st.data_editor(
+                    df_players,
+                    column_config={
+                        "Active": st.column_config.CheckboxColumn(
+                            "Active",
+                            help="Uncheck to hide player from leaderboard and selection",
+                            default=True,
+                        ),
+                        "ID": None, # Hide ID column
+                        "Name": st.column_config.TextColumn("Player Name", disabled=True)
+                    },
+                    disabled=["Name"],
+                    hide_index=True,
+                )
+
+                # Check for changes
+                if not edited_df.equals(df_players):
+                    # Identify which row changed
+                    changed_rows = edited_df[edited_df["Active"] != df_players["Active"]]
+                    for _, row in changed_rows.iterrows():
+                        DatabaseManager.toggle_player_status(int(row["ID"]), bool(row["Active"]))
+                    st.success("Changes saved!")
+                    st.rerun()
 
     elif action == "New Match":
         if st.session_state['user'] is None or st.session_state['user']['role'] != 'user':
