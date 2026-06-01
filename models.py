@@ -15,27 +15,46 @@ class DatabaseManager:
 
     @staticmethod
     @st.cache_data
-    def get_leaderboard():
-        """Fetches active player statistics ordered by rating, using the persistent trend column."""
+    def get_leaderboards():
+        """Fetches all available leaderboards."""
         with get_connection() as conn:
-            query = text("""
-                SELECT name, rating, games, wins, losses, goal_diff, trend
-                FROM players
-                WHERE is_active = TRUE
-                ORDER BY rating DESC
-            """)
+            query = text("SELECT id, name, code FROM leaderboards ORDER BY id")
             return conn.execute(query).fetchall()
 
     @staticmethod
-    def add_player(name: str):
-        """Adds a new player to the database."""
-        with engine.begin() as conn:
+    @st.cache_data
+    def get_leaderboard(leaderboard_id: int):
+        """Fetches active player statistics for a specific leaderboard."""
+        with get_connection() as conn:
             query = text("""
-                INSERT INTO players (name, rating, games, wins, losses, goal_diff, trend, is_active)
-                VALUES (:name, 1000, 0, 0, 0, 0, '', TRUE)
-                ON CONFLICT (name) DO UPDATE SET is_active = TRUE
+                SELECT p.name, ps.rating, ps.games, ps.wins, ps.losses, ps.goal_diff, ps.trend
+                FROM players p
+                JOIN player_stats ps ON p.id = ps.player_id
+                WHERE p.is_active = TRUE AND ps.leaderboard_id = :l_id
+                ORDER BY ps.rating DESC
             """)
-            conn.execute(query, {"name": name})
+            return conn.execute(query, {"l_id": leaderboard_id}).fetchall()
+
+    @staticmethod
+    def add_player(name: str, leaderboard_id: int):
+        """Adds a new player and initializes stats for the selected leaderboard."""
+        with engine.begin() as conn:
+            # 1. Ensure player exists globally
+            player_id_res = conn.execute(text("""
+                INSERT INTO players (name, is_active)
+                VALUES (:name, TRUE)
+                ON CONFLICT (name) DO UPDATE SET is_active = TRUE
+                RETURNING id
+            """), {"name": name}).fetchone()
+            player_id = player_id_res[0]
+            
+            # 2. Ensure player_stats exists for this specific leaderboard
+            conn.execute(text("""
+                INSERT INTO player_stats (player_id, leaderboard_id, rating, games, wins, losses, goal_diff, trend)
+                VALUES (:pid, :l_id, 1000, 0, 0, 0, 0, '')
+                ON CONFLICT (player_id, leaderboard_id) DO NOTHING
+            """), {"pid": player_id, "l_id": leaderboard_id})
+            
         st.cache_data.clear()
 
     @staticmethod
@@ -48,8 +67,8 @@ class DatabaseManager:
 
     @staticmethod
     @st.cache_data
-    def get_match_history(limit=50, player_id=None):
-        """Fetches the history of played matches, optionally filtered by player_id."""
+    def get_match_history(limit=50, player_id=None, leaderboard_id=None):
+        """Fetches the history of played matches, optionally filtered by player_id and leaderboard_id."""
         with get_connection() as conn:
             query_str = """
                 SELECT
@@ -73,13 +92,19 @@ class DatabaseManager:
                 JOIN players p3 ON m.b1_id = p3.id
                 JOIN players p4 ON m.b2_id = p4.id
             """
+            where_clauses = []
             params = {"limit": limit}
             
             if player_id:
-                query_str += """
-                    WHERE m.a1_id = :pid OR m.a2_id = :pid OR m.b1_id = :pid OR m.b2_id = :pid
-                """
+                where_clauses.append("(m.a1_id = :pid OR m.a2_id = :pid OR m.b1_id = :pid OR m.b2_id = :pid)")
                 params["pid"] = player_id
+            
+            if leaderboard_id:
+                where_clauses.append("m.leaderboard_id = :l_id")
+                params["l_id"] = leaderboard_id
+                
+            if where_clauses:
+                query_str += " WHERE " + " AND ".join(where_clauses)
                 
             query_str += " ORDER BY m.date DESC LIMIT :limit"
             
@@ -87,8 +112,8 @@ class DatabaseManager:
 
     @staticmethod
     @st.cache_data
-    def get_elo_history():
-        """Fetches the full Elo rating history for all players."""
+    def get_elo_history(leaderboard_id=None):
+        """Fetches the full Elo rating history for all players, optionally filtered by leaderboard_id."""
         with get_connection() as conn:
             query = """
                 SELECT
@@ -97,9 +122,14 @@ class DatabaseManager:
                     h.rating
                 FROM player_ratings_history h
                 JOIN players p ON h.player_id = p.id
-                ORDER BY h.created_at
             """
-            return pd.read_sql(query, conn)
+            params = {}
+            if leaderboard_id:
+                query += " WHERE h.leaderboard_id = :l_id"
+                params["l_id"] = leaderboard_id
+            
+            query += " ORDER BY h.created_at"
+            return pd.read_sql(text(query), conn, params=params)
 
     @staticmethod
     @st.cache_data
@@ -107,7 +137,7 @@ class DatabaseManager:
         """Validates user credentials."""
         with get_connection() as conn:
             query = text("""
-                SELECT u.id, u.username, r.name AS role
+                SELECT u.id, u.username, r.name AS role, r.leaderboard_id
                 FROM users u
                 JOIN roles r ON u.role_id = r.id
                 WHERE u.username=:username AND u.password=:password
@@ -119,20 +149,32 @@ class DatabaseManager:
 
     @staticmethod
     @st.cache_data
-    def get_player_names():
-        """Fetches IDs and names of all active registered players."""
+    def get_player_names(leaderboard_id: int):
+        """Fetches IDs and names of active players for a specific leaderboard."""
         with get_connection() as conn:
-            query = text("SELECT id, name FROM players WHERE is_active = TRUE ORDER BY name")
-            rows = conn.execute(query).fetchall()
+            query = text("""
+                SELECT p.id, p.name 
+                FROM players p
+                JOIN player_stats ps ON p.id = ps.player_id
+                WHERE p.is_active = TRUE AND ps.leaderboard_id = :l_id
+                ORDER BY p.name
+            """)
+            rows = conn.execute(query, {"l_id": leaderboard_id}).fetchall()
         return [(r[0], r[1]) for r in rows]
 
     @staticmethod
     @st.cache_data
-    def get_all_players():
-        """Fetches all players (active and inactive) for management."""
+    def get_all_players(leaderboard_id: int):
+        """Fetches all players (active and inactive) for a specific leaderboard."""
         with get_connection() as conn:
-            query = text("SELECT id, name, is_active FROM players ORDER BY name")
-            return conn.execute(query).fetchall()
+            query = text("""
+                SELECT p.id, p.name, p.is_active 
+                FROM players p
+                JOIN player_stats ps ON p.id = ps.player_id
+                WHERE ps.leaderboard_id = :l_id
+                ORDER BY p.name
+            """)
+            return conn.execute(query, {"l_id": leaderboard_id}).fetchall()
 
     @staticmethod
     def _expected_score(r_team, r_opp):
@@ -163,7 +205,7 @@ class DatabaseManager:
             # 1. Get match details
             match_query = text("""
                 SELECT a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, 
-                       delta_a1, delta_a2, delta_b1, delta_b2 
+                       delta_a1, delta_a2, delta_b1, delta_b2, leaderboard_id
                 FROM matches WHERE id = :mid
             """)
             match = conn.execute(match_query, {"mid": match_id}).fetchone()
@@ -172,16 +214,16 @@ class DatabaseManager:
 
             m = match._asdict() if hasattr(match, "_asdict") else match._mapping
             player_ids = [m["a1_id"], m["a2_id"], m["b1_id"], m["b2_id"]]
+            l_id = m["leaderboard_id"]
 
-            # 2. Fetch all involved players in one call
+            # 2. Fetch all involved players' stats for THIS leaderboard
             players_res = conn.execute(
-                text("SELECT id, rating, games, wins, losses, goal_diff FROM players WHERE id IN :ids"),
-                {"ids": tuple(player_ids)}
+                text("SELECT player_id, rating, games, wins, losses, goal_diff FROM player_stats WHERE player_id IN :ids AND leaderboard_id = :l_id"),
+                {"ids": tuple(player_ids), "l_id": l_id}
             ).fetchall()
-            players = {p.id: list(p) for p in players_res}
+            players = {p.player_id: list(p) for p in players_res}
 
             # 3. Calculate restored stats in memory
-            # Map player ID to their role/delta for this match
             roles = [
                 (m["a1_id"], m["delta_a1"], m["goals_a"] > m["goals_b"], m["goals_a"] - m["goals_b"]),
                 (m["a2_id"], m["delta_a2"], m["goals_a"] > m["goals_b"], m["goals_a"] - m["goals_b"]),
@@ -199,7 +241,7 @@ class DatabaseManager:
                     p[4] -= 1        # losses
                 p[5] -= gd_contrib   # goal_diff
 
-            # 4. Get new trends for all players in one call
+            # 4. Get new trends for all players in THIS leaderboard
             trend_query = text("""
                 SELECT pid, STRING_AGG(result, ' ') WITHIN GROUP (ORDER BY date DESC) as trend
                 FROM (
@@ -214,19 +256,19 @@ class DatabaseManager:
                         ROW_NUMBER() OVER (PARTITION BY p.id ORDER BY m.date DESC) as rn
                     FROM players p
                     JOIN matches m ON m.a1_id = p.id OR m.a2_id = p.id OR m.b1_id = p.id OR m.b2_id = p.id
-                    WHERE p.id IN :ids AND m.id != :mid
+                    WHERE p.id IN :ids AND m.id != :mid AND m.leaderboard_id = :l_id
                 ) t 
                 WHERE rn <= 5
                 GROUP BY pid
             """)
-            trends_res = conn.execute(trend_query, {"ids": tuple(player_ids), "mid": match_id}).fetchall()
+            trends_res = conn.execute(trend_query, {"ids": tuple(player_ids), "mid": match_id, "l_id": l_id}).fetchall()
             trends = {t.pid: t.trend for t in trends_res}
 
-            # 5. Batch Update Players
+            # 5. Batch Update Player Stats
             update_stmt = text("""
-                UPDATE players
+                UPDATE player_stats
                 SET rating=:r, games=:g, wins=:w, losses=:l, goal_diff=:gd, trend=:t
-                WHERE id=:id
+                WHERE player_id=:pid AND leaderboard_id=:l_id
             """)
             conn.execute(update_stmt, [
                 {
@@ -236,7 +278,8 @@ class DatabaseManager:
                     "l": players[pid][4], 
                     "gd": players[pid][5], 
                     "t": trends.get(pid, ""),
-                    "id": pid
+                    "pid": pid,
+                    "l_id": l_id
                 }
                 for pid in player_ids
             ])
@@ -249,7 +292,7 @@ class DatabaseManager:
         return True
 
     @staticmethod
-    def record_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_b):
+    def record_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_b, leaderboard_id):
         """Records a new match, updates player ratings, and saves history."""
         if goals_a == goals_b:
             raise ValueError("Draws are not allowed.")
@@ -260,33 +303,36 @@ class DatabaseManager:
         with engine.begin() as conn:
             names = [a1_name, a2_name, b1_name, b2_name]
             
-            # Get rating range for farming threshold
-            range_res = conn.execute(text("SELECT MAX(rating), MIN(rating) FROM players")).fetchone()
-            max_r, min_r = range_res if range_res and range_res[0] is not None else (1000, 1000)
-            rating_diff_threshold = (max_r - min_r) * 0.5 # Threshold set to 50% of the total rating spread
+            # 1. Ensure all players exist globally (Batch)
+            conn.execute(text("""
+                INSERT INTO players (name) 
+                VALUES (:n1), (:n2), (:n3), (:n4)
+                ON CONFLICT (name) DO NOTHING
+            """), {"n1": a1_name, "n2": a2_name, "n3": b1_name, "n4": b2_name})
 
-            # Fetch existing players
+            # 2. Ensure all players have stats entries for this leaderboard (Batch)
+            conn.execute(text("""
+                INSERT INTO player_stats (player_id, leaderboard_id)
+                SELECT id, :l_id FROM players WHERE name IN :names
+                ON CONFLICT (player_id, leaderboard_id) DO NOTHING
+            """), {"names": tuple(names), "l_id": leaderboard_id})
+
+            # 3. Get rating range for farming threshold (1 call)
+            range_res = conn.execute(text("SELECT MAX(rating), MIN(rating) FROM player_stats WHERE leaderboard_id = :l_id"), {"l_id": leaderboard_id}).fetchone()
+            max_r, min_r = range_res if range_res and range_res[0] is not None else (1000, 1000)
+            rating_diff_threshold = (max_r - min_r) * 0.5 
+
+            # 4. Fetch existing stats for these players in this leaderboard (1 call)
             fetch_query = text("""
-                SELECT id, name, rating, games, wins, losses, goal_diff, trend
-                FROM players WHERE name IN :names
+                SELECT p.id, p.name, ps.rating, ps.games, ps.wins, ps.losses, ps.goal_diff, ps.trend
+                FROM players p
+                JOIN player_stats ps ON p.id = ps.player_id
+                WHERE p.name IN :names AND ps.leaderboard_id = :l_id
             """)
-            res = conn.execute(fetch_query, {"names": tuple(names)})
+            res = conn.execute(fetch_query, {"names": tuple(names), "l_id": leaderboard_id})
             existing = {r.name: list(r) for r in res.fetchall()}
 
-            # Ensure all players exist and load data
-            players_data = []
-            for name in names:
-                if name not in existing:
-                    insert_query = text("""
-                        INSERT INTO players (name, rating, games, wins, losses, goal_diff, trend)
-                        VALUES (:name, 1000, 0, 0, 0, 0, '')
-                        RETURNING id, name, rating, games, wins, losses, goal_diff, trend
-                    """)
-                    row = conn.execute(insert_query, {"name": name}).fetchone()
-                    existing[name] = list(row)
-                players_data.append(existing[name])
-
-            a1, a2, b1, b2 = players_data
+            a1, a2, b1, b2 = [existing[name] for name in names]
 
             # Elo Calculation
             r_a = (a1[2] + a2[2]) / 2.0
@@ -340,22 +386,22 @@ class DatabaseManager:
                 new_parts = ([res_char] + parts)[:5]
                 p[7] = " ".join(new_parts)
 
-            # Batch Update Players in DB
+            # Batch Update Player Stats in DB
             update_stmt = text("""
-                UPDATE players
+                UPDATE player_stats
                 SET rating=:r, games=:g, wins=:w, losses=:l, goal_diff=:gd, trend=:t
-                WHERE id=:id
+                WHERE player_id=:pid AND leaderboard_id=:l_id
             """)
             conn.execute(update_stmt, [
-                {"r": p[2], "g": p[3], "w": p[4], "l": p[5], "gd": p[6], "t": p[7], "id": p[0]}
+                {"r": p[2], "g": p[3], "w": p[4], "l": p[5], "gd": p[6], "t": p[7], "pid": p[0], "l_id": leaderboard_id}
                 for p in [a1, a2, b1, b2]
             ])
 
             # Insert Match record
             match_insert = text("""
                 INSERT INTO matches
-                (date, a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, delta_a1, delta_a2, delta_b1, delta_b2)
-                VALUES (:d, :a1, :a2, :b1, :b2, :ga, :gb, :da1, :da2, :db1, :db2)
+                (date, a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, delta_a1, delta_a2, delta_b1, delta_b2, leaderboard_id)
+                VALUES (:d, :a1, :a2, :b1, :b2, :ga, :gb, :da1, :da2, :db1, :db2, :l_id)
                 RETURNING id
             """)
             match_id = conn.execute(match_insert, {
@@ -364,16 +410,17 @@ class DatabaseManager:
                 "b1": b1[0], "b2": b2[0],
                 "ga": goals_a, "gb": goals_b,
                 "da1": delta_a1, "da2": delta_a2,
-                "db1": delta_b1, "db2": delta_b2
+                "db1": delta_b1, "db2": delta_b2,
+                "l_id": leaderboard_id
             }).scalar()
 
             # Batch Save Rating History in DB
             history_insert = text("""
-                INSERT INTO player_ratings_history (player_id, match_id, rating)
-                VALUES (:pid, :mid, :rating)
+                INSERT INTO player_ratings_history (player_id, match_id, rating, leaderboard_id)
+                VALUES (:pid, :mid, :rating, :l_id)
             """)
             conn.execute(history_insert, [
-                {"pid": p[0], "mid": match_id, "rating": int(p[2])}
+                {"pid": p[0], "mid": match_id, "rating": int(p[2]), "l_id": leaderboard_id}
                 for p in [a1, a2, b1, b2]
             ])
         

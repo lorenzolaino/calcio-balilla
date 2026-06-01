@@ -28,13 +28,12 @@ class TestPlayerManagement(unittest.TestCase):
         mock_conn = MagicMock()
         mock_engine.begin.return_value.__enter__.return_value = mock_conn
         
-        DatabaseManager.add_player("John Doe")
+        DatabaseManager.add_player("John Doe", 1)
         
-        # Verify SQL contains DO UPDATE SET is_active = TRUE
-        args, kwargs = mock_conn.execute.call_args
-        sql = str(args[0]).lower()
-        self.assertIn("on conflict", sql)
-        self.assertIn("do update set is_active = true", sql)
+        # Verify SQL contains DO UPDATE SET is_active = TRUE in one of the calls
+        all_sql = " ".join([str(call[0][0]).lower() for call in mock_conn.execute.call_args_list])
+        self.assertIn("on conflict", all_sql)
+        self.assertIn("do update set is_active = true", all_sql)
 
     @patch('models.get_connection')
     def test_leaderboard_filtering(self, mock_get_conn):
@@ -43,12 +42,13 @@ class TestPlayerManagement(unittest.TestCase):
         mock_get_conn.return_value.__enter__.return_value = mock_conn
         
         # Bypass any potentially cached version
-        DatabaseManager.get_leaderboard()
+        DatabaseManager.get_leaderboard(1)
         
         self.assertTrue(mock_conn.execute.called)
         args, kwargs = mock_conn.execute.call_args
         sql = str(args[0]).lower()
-        self.assertIn("where is_active = true", sql)
+        self.assertIn("where p.is_active = true", sql)
+        self.assertIn("join player_stats", sql)
 
     @patch('models.get_connection')
     def test_player_names_filtering(self, mock_get_conn):
@@ -56,12 +56,13 @@ class TestPlayerManagement(unittest.TestCase):
         mock_conn = MagicMock()
         mock_get_conn.return_value.__enter__.return_value = mock_conn
         
-        DatabaseManager.get_player_names()
+        DatabaseManager.get_player_names(1)
         
         self.assertTrue(mock_conn.execute.called)
         args, kwargs = mock_conn.execute.call_args
         sql = str(args[0]).lower()
-        self.assertIn("where is_active = true", sql)
+        self.assertIn("where p.is_active = true", sql)
+        self.assertIn("join player_stats", sql)
 
     @patch('models.engine')
     def test_toggle_player_status(self, mock_engine):

@@ -6,18 +6,23 @@ from db import init_db
 from models import DatabaseManager
 from streamlit_js_eval import streamlit_js_eval
 
-CURRENT_VERSION = "1.2.0"
+CURRENT_VERSION = "1.3.0"
 
 @st.dialog("🚀 What's New")
 def show_release_notes():
     st.markdown(f"""
-    ### Version {CURRENT_VERSION}
-    Welcome to the new update!
+    ### Version {CURRENT_VERSION} - Multi-Leaderboard Update
+    This is a major update introducing isolated competitive environments and refined management roles.
     
     **New Features**:
-    1.  **Match Deletion**: Delete incorrect matches with automatic point and trend restoration.
-    2.  **Player Search in History**: Filter the match history to see only matches involving a specific player.
-    3.  **Player Management**: The "Add Player" menu is now **"Manage Players"**, where you can also **Deactivate** players while preserving their history.
+    1.  **Multi-Leaderboard Support**: Switch between **Leaderboard DG** and **Leaderboard UT** (and more in the future) via the sidebar.
+    2.  **Leaderboard Isolation**: Players, statistics, and matches are now strictly scoped to the selected leaderboard.
+    3.  **Refined Management Roles**: 
+        - **Admins** have global control.
+        - **Leader Managers** are now assigned to specific leaderboards.
+    4.  **Performance Optimization**: Database interactions have been refactored for maximum efficiency and minimum latency.
+    
+    **Note for Admins**: Existing data has been migrated to the DG leaderboard. New players added while UT is selected will only appear in that leaderboard.
     """)
     if st.button("Got it!"):
         st.session_state['notes_dismissed'] = True
@@ -74,7 +79,8 @@ def run_web_app():
                 st.session_state['user'] = {
                     "id": user[0], 
                     "username": user[1], 
-                    "role": user[2]
+                    "role": user[2],
+                    "leaderboard_id": user[3]
                 }
                 st.success(f"Welcome {user[1]}!")
                 st.rerun()
@@ -89,7 +95,39 @@ def run_web_app():
             st.session_state['user'] = None
             st.rerun()
 
-    st.title("⚽ Calcio Balilla - Elo Leaderboard")
+    # --- Leaderboard Selection ---
+    leaderboards = DatabaseManager.get_leaderboards()
+    if not leaderboards:
+        st.error("No leaderboards found in database.")
+        st.stop()
+    
+    leaderboard_options = {l[1]: l[0] for l in leaderboards}
+    
+    # Initialize session state for leaderboard
+    if 'selected_leaderboard' not in st.session_state:
+        st.session_state['selected_leaderboard'] = list(leaderboard_options.keys())[0]
+        
+    st.sidebar.title("Leaderboard Settings")
+    selected_l_name = st.sidebar.selectbox(
+        "Select Leaderboard", 
+        list(leaderboard_options.keys()),
+        index=list(leaderboard_options.keys()).index(st.session_state['selected_leaderboard'])
+    )
+    st.session_state['selected_leaderboard'] = selected_l_name
+    selected_l_id = leaderboard_options[selected_l_name]
+
+    st.title(f"⚽ {selected_l_name}")
+
+    # Helper for permissions
+    def can_manage():
+        if st.session_state['user'] is None:
+            return False
+        if st.session_state['user']['role'] == 'admin':
+            return True
+        # If the role is specifically linked to this leaderboard
+        if st.session_state['user']['leaderboard_id'] == selected_l_id:
+            return True
+        return False
 
     # --- Sidebar Navigation ---
     st.sidebar.title("Actions")
@@ -100,7 +138,7 @@ def run_web_app():
 
     if action == "Leaderboard":
         st.subheader("🏆 Leaderboard")
-        leaderboard_data = DatabaseManager.get_leaderboard()
+        leaderboard_data = DatabaseManager.get_leaderboard(selected_l_id)
         
         st.dataframe([
             {
@@ -124,7 +162,7 @@ def run_web_app():
         st.subheader("📜 Match History")
         
         # Player filter (include all players so history can be searched for inactive ones)
-        all_players_data = DatabaseManager.get_all_players()
+        all_players_data = DatabaseManager.get_all_players(selected_l_id)
         player_options = ["All Players"] + [p[1] for p in all_players_data]
         player_map = {p[1]: p[0] for p in all_players_data}
         
@@ -132,7 +170,7 @@ def run_web_app():
         selected_player_id = player_map.get(selected_player_name)
         
         limit = st.slider("Number of matches to show", 5, 100, 20)
-        history_data = DatabaseManager.get_match_history(limit, player_id=selected_player_id)
+        history_data = DatabaseManager.get_match_history(limit, player_id=selected_player_id, leaderboard_id=selected_l_id)
 
         if not history_data:
             st.info("No matches recorded.")
@@ -173,7 +211,7 @@ def run_web_app():
     
     elif action == "Elo Trends":
         st.subheader("📈 Player Elo Trends")
-        df_history = DatabaseManager.get_elo_history()
+        df_history = DatabaseManager.get_elo_history(selected_l_id)
 
         if df_history.empty:
             st.info("No historical data available.")
@@ -203,8 +241,8 @@ def run_web_app():
             st.altair_chart(chart, use_container_width=True)
 
     elif action == "Manage Players":
-        if st.session_state['user'] is None or st.session_state['user']['role'] != 'user':
-            st.warning("You must be logged in to manage players")
+        if not can_manage():
+            st.warning(f"You do not have permission to manage {selected_l_name}")
         else:
             st.subheader("👥 Manage Players")
             
@@ -213,8 +251,8 @@ def run_web_app():
                 new_player_name = st.text_input("Player Name")
                 if st.button("Add"):
                     if new_player_name:
-                        DatabaseManager.add_player(new_player_name)
-                        st.success(f"Player '{new_player_name}' added/reactivated")
+                        DatabaseManager.add_player(new_player_name, selected_l_id)
+                        st.success(f"Player '{new_player_name}' added to {selected_l_name}")
                         st.rerun()
                     else:
                         st.error("Please enter a name")
@@ -223,7 +261,7 @@ def run_web_app():
 
             # --- Player Status Management ---
             st.write("Toggle player active status (Inactive players are hidden from Leaderboard and New Match selection)")
-            all_players = DatabaseManager.get_all_players()
+            all_players = DatabaseManager.get_all_players(selected_l_id)
             
             if not all_players:
                 st.info("No players registered.")
@@ -257,11 +295,11 @@ def run_web_app():
                     st.rerun()
 
     elif action == "New Match":
-        if st.session_state['user'] is None or st.session_state['user']['role'] != 'user':
-            st.warning("You must be logged in to record matches")
+        if not can_manage():
+            st.warning(f"You do not have permission to record matches for {selected_l_name}")
         else:
-            st.subheader("⚽ Record 2vs2 Match")
-            players_data = DatabaseManager.get_player_names()
+            st.subheader(f"⚽ Record 2vs2 Match for {selected_l_name}")
+            players_data = DatabaseManager.get_player_names(selected_l_id)
             players_list = [p[1] for p in players_data]
             
             if len(players_list) < 4:
@@ -289,19 +327,19 @@ def run_web_app():
 
             if st.button("Save Match"):
                 try:
-                    DatabaseManager.record_match(a1, a2, b1, b2, score_a, score_b)
-                    st.success("✅ Match saved! Leaderboard updated.")
+                    DatabaseManager.record_match(a1, a2, b1, b2, score_a, score_b, selected_l_id)
+                    st.success(f"✅ Match saved! {selected_l_name} updated.")
                     st.rerun()
                 except ValueError as error:
                     st.error(str(error))
 
     elif action == "Delete Match":
-        if st.session_state['user'] is None or st.session_state['user']['role'] != 'user':
-            st.warning("You must be logged in to delete matches")
+        if not can_manage():
+            st.warning(f"You do not have permission to delete matches for {selected_l_name}")
         else:
-            st.subheader("🗑️ Delete Match")
+            st.subheader(f"🗑️ Delete Match from {selected_l_name}")
             limit = st.slider("Number of matches to search from", 5, 100, 20)
-            history_data = DatabaseManager.get_match_history(limit)
+            history_data = DatabaseManager.get_match_history(limit, leaderboard_id=selected_l_id)
 
             if not history_data:
                 st.info("No matches recorded.")

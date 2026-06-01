@@ -17,23 +17,40 @@ def get_connection():
 def init_db():
     """Initializes the database schema if it doesn't exist."""
     with engine.begin() as conn:
+        # 1. Base Tables
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS players (
             id SERIAL PRIMARY KEY,
             name TEXT UNIQUE NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE
+        );
+        """))
+        conn.execute(text("ALTER TABLE players ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;"))
+
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS leaderboards (
+            id SERIAL PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            code TEXT UNIQUE NOT NULL
+        );
+        """))
+
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS player_stats (
+            id SERIAL PRIMARY KEY,
+            player_id INTEGER REFERENCES players(id) ON DELETE CASCADE,
+            leaderboard_id INTEGER REFERENCES leaderboards(id) ON DELETE CASCADE,
             rating REAL NOT NULL DEFAULT 1000,
             games INTEGER NOT NULL DEFAULT 0,
             wins INTEGER NOT NULL DEFAULT 0,
             losses INTEGER NOT NULL DEFAULT 0,
             goal_diff INTEGER NOT NULL DEFAULT 0,
-            trend TEXT,
-            is_active BOOLEAN NOT NULL DEFAULT TRUE
+            trend TEXT DEFAULT '',
+            UNIQUE(player_id, leaderboard_id)
         );
         """))
 
-        # Add is_active column if it doesn't exist
-        conn.execute(text("ALTER TABLE players ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;"))
-
+        # 2. Match Tables
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS matches (
             id SERIAL PRIMARY KEY,
@@ -44,20 +61,16 @@ def init_db():
             b2_id INTEGER REFERENCES players(id),
             goals_a INTEGER NOT NULL,
             goals_b INTEGER NOT NULL,
-            delta_a1 REAL NOT NULL DEFAULT 0,
-            delta_a2 REAL NOT NULL DEFAULT 0,
-            delta_b1 REAL NOT NULL DEFAULT 0,
-            delta_b2 REAL NOT NULL DEFAULT 0
+            delta_a1 REAL DEFAULT 0,
+            delta_a2 REAL DEFAULT 0,
+            delta_b1 REAL DEFAULT 0,
+            delta_b2 REAL DEFAULT 0,
+            delta_a REAL,
+            delta_b REAL,
+            leaderboard_id INTEGER REFERENCES leaderboards(id)
         );
         """))
-
-        # Add individual delta columns if they don't exist
-        for col in ["delta_a1", "delta_a2", "delta_b1", "delta_b2"]:
-            conn.execute(text(f"ALTER TABLE matches ADD COLUMN IF NOT EXISTS {col} REAL DEFAULT 0;"))
-
-        # Fix: Drop NOT NULL constraint for team deltas to support new matches
-        conn.execute(text("ALTER TABLE matches ALTER COLUMN delta_a DROP NOT NULL;"))
-        conn.execute(text("ALTER TABLE matches ALTER COLUMN delta_b DROP NOT NULL;"))
+        conn.execute(text("ALTER TABLE matches ADD COLUMN IF NOT EXISTS leaderboard_id INTEGER REFERENCES leaderboards(id);"))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS player_ratings_history (
@@ -65,30 +78,21 @@ def init_db():
             player_id INTEGER REFERENCES players(id),
             match_id INTEGER REFERENCES matches(id),
             rating REAL NOT NULL,
-            created_at TIMESTAMP DEFAULT NOW()
+            created_at TIMESTAMP DEFAULT NOW(),
+            leaderboard_id INTEGER REFERENCES leaderboards(id)
         );
         """))
+        conn.execute(text("ALTER TABLE player_ratings_history ADD COLUMN IF NOT EXISTS leaderboard_id INTEGER REFERENCES leaderboards(id);"))
 
-        conn.execute(text("""
-        ALTER TABLE player_ratings_history ALTER COLUMN rating TYPE REAL;
-        """).execution_options(autocommit=True))
-
-        conn.execute(text("""
-        ALTER TABLE players ADD COLUMN IF NOT EXISTS trend TEXT DEFAULT '';
-        """))
-
-        # Migrate existing trend values from V/S to W/L
-        conn.execute(text("""
-        UPDATE players SET trend = REPLACE(REPLACE(trend, 'V', 'W'), 'S', 'L')
-        WHERE trend LIKE '%V%' OR trend LIKE '%S%';
-        """))
-
+        # 3. Roles & Users
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS roles (
             id SERIAL PRIMARY KEY,
-            name TEXT UNIQUE NOT NULL
+            name TEXT UNIQUE NOT NULL,
+            leaderboard_id INTEGER REFERENCES leaderboards(id)
         );
         """))
+        conn.execute(text("ALTER TABLE roles ADD COLUMN IF NOT EXISTS leaderboard_id INTEGER REFERENCES leaderboards(id);"))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS users (
@@ -99,8 +103,21 @@ def init_db():
         );
         """))
 
+        # 4. Default Seed Data (Idempotent)
+        # Default Leaderboards
+        res = conn.execute(text("SELECT count(*) FROM leaderboards")).fetchone()
+        if res[0] == 0:
+            conn.execute(text("INSERT INTO leaderboards (name, code) VALUES ('Leaderboard DG', 'dg'), ('Leaderboard UT', 'ut')"))
+
+        # Default Global Roles
         conn.execute(text("""
-        INSERT INTO roles (name) VALUES
-        ('guest'), ('user')
+        INSERT INTO roles (name) VALUES ('guest'), ('user'), ('admin')
+        ON CONFLICT (name) DO NOTHING;
+        """))
+
+        # Leaderboard-specific Manager Roles
+        conn.execute(text("""
+        INSERT INTO roles (name, leaderboard_id)
+        SELECT 'Leader Manager ' || code, id FROM leaderboards
         ON CONFLICT (name) DO NOTHING;
         """))

@@ -41,16 +41,17 @@ class TestDeletionLogic(unittest.TestCase):
         match_data = {
             "a1_id": 1, "a2_id": 2, "b1_id": 3, "b2_id": 4,
             "goals_a": 10, "goals_b": 5,
-            "delta_a1": 5.0, "delta_a2": 4.0, "delta_b1": -4.0, "delta_b2": -3.0
+            "delta_a1": 5.0, "delta_a2": 4.0, "delta_b1": -4.0, "delta_b2": -3.0,
+            "leaderboard_id": 1
         }
         mock_match = MockRow(match_data)
 
         # Mock Players
         players_data = [
-            MockRow({"id": 1, "rating": 1005.0, "games": 1, "wins": 1, "losses": 0, "goal_diff": 5}),
-            MockRow({"id": 2, "rating": 1004.0, "games": 1, "wins": 1, "losses": 0, "goal_diff": 5}),
-            MockRow({"id": 3, "rating": 996.0, "games": 1, "wins": 0, "losses": 1, "goal_diff": -5}),
-            MockRow({"id": 4, "rating": 997.0, "games": 1, "wins": 0, "losses": 1, "goal_diff": -5}),
+            MockRow({"player_id": 1, "rating": 1005.0, "games": 1, "wins": 1, "losses": 0, "goal_diff": 5}),
+            MockRow({"player_id": 2, "rating": 1004.0, "games": 1, "wins": 1, "losses": 0, "goal_diff": 5}),
+            MockRow({"player_id": 3, "rating": 996.0, "games": 1, "wins": 0, "losses": 1, "goal_diff": -5}),
+            MockRow({"player_id": 4, "rating": 997.0, "games": 1, "wins": 0, "losses": 1, "goal_diff": -5}),
         ]
 
         # Mock Trends
@@ -67,7 +68,7 @@ class TestDeletionLogic(unittest.TestCase):
                 res = MagicMock()
                 res.fetchone.return_value = mock_match
                 return res
-            if "select id, rating, games" in stmt_text:
+            if "select player_id, rating, games" in stmt_text:
                 res = MagicMock()
                 res.fetchall.return_value = players_data
                 return res
@@ -85,7 +86,7 @@ class TestDeletionLogic(unittest.TestCase):
         self.assertTrue(result)
 
         # Verify Batch Update call
-        update_calls = [call for call in mock_conn.execute.call_args_list if "update players" in str(call[0][0]).lower()]
+        update_calls = [call for call in mock_conn.execute.call_args_list if "update player_stats" in str(call[0][0]).lower()]
         self.assertEqual(len(update_calls), 1)
         
         updated_list = update_calls[0][0][1]
@@ -96,7 +97,7 @@ class TestDeletionLogic(unittest.TestCase):
         # games: 1 - 1 = 0
         # wins: 1 - 1 = 0
         # goal_diff: 5 - 5 = 0
-        p1_update = next(p for p in updated_list if p["id"] == 1)
+        p1_update = next(p for p in updated_list if p["pid"] == 1)
         self.assertEqual(p1_update["r"], 1000.0)
         self.assertEqual(p1_update["g"], 0)
         self.assertEqual(p1_update["w"], 0)
@@ -108,7 +109,7 @@ class TestDeletionLogic(unittest.TestCase):
         # games: 1 - 1 = 0
         # losses: 1 - 1 = 0
         # goal_diff: -5 - (-5) = 0
-        p3_update = next(p for p in updated_list if p["id"] == 3)
+        p3_update = next(p for p in updated_list if p["pid"] == 3)
         self.assertEqual(p3_update["r"], 1000.0)
         self.assertEqual(p3_update["g"], 0)
         self.assertEqual(p3_update["l"], 0)

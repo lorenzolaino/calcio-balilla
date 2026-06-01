@@ -52,16 +52,27 @@ class TestSeasonSimulation(unittest.TestCase):
                 res.fetchone.return_value = (max(ratings), min(ratings))
                 return res
             
-            if "select id, name, rating" in stmt_text:
+            if "select id from players" in stmt_text:
+                name = params['name']
+                res = MagicMock()
+                res.fetchone.return_value = (db_players[name][0],)
+                return res
+            
+            if "select 1 from player_stats" in stmt_text:
+                res = MagicMock()
+                res.fetchone.return_value = (1,)
+                return res
+
+            if "select p.id, p.name, ps.rating" in stmt_text:
                 names = params['names']
                 res = MagicMock()
                 res.fetchall.return_value = [PlayerRow(db_players[n]) for n in names]
                 return res
             
-            if "update players" in stmt_text:
-                # params is a list of dicts: [{'r':..., 'id':...}, ...]
+            if "update player_stats" in stmt_text:
+                # params is a list of dicts: [{'r':..., 'pid':...}, ...]
                 for p_update in params:
-                    p_id = p_update['id']
+                    p_id = p_update['pid']
                     # Find player by id
                     for p_name, p_data in db_players.items():
                         if p_data[0] == p_id:
@@ -103,7 +114,7 @@ class TestSeasonSimulation(unittest.TestCase):
                 # Team B wins
                 goals_a, goals_b = random.randint(0, 8), 10
             
-            DatabaseManager.record_match(a1, a2, b1, b2, goals_a, goals_b)
+            DatabaseManager.record_match(a1, a2, b1, b2, goals_a, goals_b, 1)
 
         # Final Leaderboard Analysis
         sorted_players = sorted(db_players.values(), key=lambda x: x[2], reverse=True)

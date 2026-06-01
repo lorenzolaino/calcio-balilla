@@ -54,7 +54,16 @@ class TestScoringLogic(unittest.TestCase):
                 res = MagicMock()
                 res.fetchone.return_value = (1200.0, 900.0) # Spread = 300, Threshold = 150
                 return res
-            if "select id, name, rating" in stmt_text:
+            if "select id from players" in stmt_text:
+                res = MagicMock()
+                name = params['name']
+                res.fetchone.return_value = (players[name].id,)
+                return res
+            if "select 1 from player_stats" in stmt_text:
+                res = MagicMock()
+                res.fetchone.return_value = (1,)
+                return res
+            if "select p.id, p.name, ps.rating" in stmt_text:
                 res = MagicMock()
                 names = params['names']
                 res.fetchall.return_value = [players[name] for name in names]
@@ -68,9 +77,9 @@ class TestScoringLogic(unittest.TestCase):
         mock_conn.execute.side_effect = side_effect
 
         # CASE 1: Favored team wins
-        DatabaseManager.record_match('A1', 'A2', 'B1', 'B2', 10, 5)
+        DatabaseManager.record_match('A1', 'A2', 'B1', 'B2', 10, 5, 1)
 
-        update_calls = [call for call in mock_conn.execute.call_args_list if "update players" in str(call[0][0]).lower()]
+        update_calls = [call for call in mock_conn.execute.call_args_list if "update player_stats" in str(call[0][0]).lower()]
         updated_data = update_calls[-1][0][1]
         
         delta_a1 = updated_data[0]['r'] - 1200.0
@@ -102,7 +111,16 @@ class TestScoringLogic(unittest.TestCase):
                     res = MagicMock()
                     res.fetchone.return_value = max_min
                     return res
-                if "select id, name, rating" in stmt_text:
+                if "select id from players" in stmt_text:
+                    res = MagicMock()
+                    name = params['name']
+                    res.fetchone.return_value = (players_dict[name].id,)
+                    return res
+                if "select 1 from player_stats" in stmt_text:
+                    res = MagicMock()
+                    res.fetchone.return_value = (1,)
+                    return res
+                if "select p.id, p.name, ps.rating" in stmt_text:
                     res = MagicMock()
                     names = params['names']
                     res.fetchall.return_value = [players_dict[name] for name in names if name in players_dict]
@@ -123,14 +141,14 @@ class TestScoringLogic(unittest.TestCase):
         
         # 1. Large Margin (10 goals) capped at 1.8x
         mock_conn.execute.side_effect = get_side_effect(players_standard)
-        DatabaseManager.record_match('A1', 'A2', 'B1', 'B2', 10, 0)
-        update_calls = [call for call in mock_conn.execute.call_args_list if "update players" in str(call[0][0]).lower()]
+        DatabaseManager.record_match('A1', 'A2', 'B1', 'B2', 10, 0, 1)
+        update_calls = [call for call in mock_conn.execute.call_args_list if "update player_stats" in str(call[0][0]).lower()]
         delta = update_calls[-1][0][1][0]['r'] - 1000.0
         self.assertAlmostEqual(delta, 14.1, places=1)
 
         # 2. Invalid Matches (Draws)
         with self.assertRaises(ValueError):
-            DatabaseManager.record_match('A1', 'A2', 'B1', 'B2', 10, 10)
+            DatabaseManager.record_match('A1', 'A2', 'B1', 'B2', 10, 10, 1)
 
 if __name__ == '__main__':
     unittest.main()
