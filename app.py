@@ -249,9 +249,12 @@ def run_web_app():
             # --- Add Player Section ---
             with st.expander("➕ Add New Player"):
                 new_player_name = st.text_input("Player Name")
-                if st.button("Add"):
+                add_btn_placeholder = st.empty()
+                if add_btn_placeholder.button("Add"):
                     if new_player_name:
-                        DatabaseManager.add_player(new_player_name, selected_l_id)
+                        add_btn_placeholder.button("Adding...", disabled=True)
+                        with st.spinner("Adding player..."):
+                            DatabaseManager.add_player(new_player_name, selected_l_id)
                         st.success(f"Player '{new_player_name}' added to {selected_l_name}")
                         st.rerun()
                     else:
@@ -325,13 +328,18 @@ def run_web_app():
                 st.error("Each player can only appear once in a match.")
                 st.stop()
 
-            if st.button("Save Match"):
+            save_btn_placeholder = st.empty()
+            if save_btn_placeholder.button("Save Match"):
                 try:
-                    DatabaseManager.record_match(a1, a2, b1, b2, score_a, score_b, selected_l_id)
+                    save_btn_placeholder.button("Saving Match...", disabled=True)
+                    with st.spinner("Saving match..."):
+                        DatabaseManager.record_match(a1, a2, b1, b2, score_a, score_b, selected_l_id)
                     st.success(f"✅ Match saved! {selected_l_name} updated.")
                     st.rerun()
                 except ValueError as error:
                     st.error(str(error))
+                    # Rerun to restore the active button for correction
+                    st.button("Try Again", on_click=st.rerun)
 
     elif action == "Delete Match":
         if not can_manage():
@@ -354,15 +362,18 @@ def run_web_app():
 
                 selected_match_labels = st.multiselect("Select matches to delete", match_options)
                 
-                if st.button("Delete Selected Matches", type="primary"):
+                delete_btn_placeholder = st.empty()
+                if delete_btn_placeholder.button("Delete Selected Matches", type="primary"):
                     if not selected_match_labels:
                         st.warning("Please select at least one match to delete.")
                     else:
+                        delete_btn_placeholder.button("Deleting...", type="primary", disabled=True)
                         success_count = 0
-                        for label in selected_match_labels:
-                            match_id = match_map[label]
-                            if DatabaseManager.delete_match(match_id):
-                                success_count += 1
+                        with st.spinner(f"Deleting {len(selected_match_labels)} matches..."):
+                            for label in selected_match_labels:
+                                match_id = match_map[label]
+                                if DatabaseManager.delete_match(match_id):
+                                    success_count += 1
                         
                         if success_count == len(selected_match_labels):
                             st.success(f"✅ {success_count} matches deleted and stats restored!")

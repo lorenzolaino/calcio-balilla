@@ -243,7 +243,7 @@ class DatabaseManager:
 
             # 4. Get new trends for all players in THIS leaderboard
             trend_query = text("""
-                SELECT pid, STRING_AGG(result, ' ') WITHIN GROUP (ORDER BY date DESC) as trend
+                SELECT pid, STRING_AGG(result, ' ' ORDER BY date DESC) as trend
                 FROM (
                     SELECT 
                         p.id as pid,
