@@ -1,5 +1,7 @@
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
+import random
+import itertools
 import pandas as pd
 from sqlalchemy import text
 import streamlit as st
@@ -197,6 +199,176 @@ class DatabaseManager:
         # Starts at 30.0, drops to 20.0 at 40 games, ~15 at 120 games.
         # Asymptotic to 10.0
         return 10.0 + (20.0 / (1.0 + (games / 40.0)))
+
+    @staticmethod
+    @st.cache_data
+    def get_future_matches(leaderboard_id: int):
+        """Fetches scheduled future matches for a specific leaderboard."""
+        with get_connection() as conn:
+            query = text("""
+                SELECT
+                    fm.date,
+                    p1.name AS a1,
+                    p2.name AS a2,
+                    p3.name AS b1,
+                    p4.name AS b2,
+                    fm.id
+                FROM future_matches fm
+                JOIN players p1 ON fm.a1_id = p1.id
+                JOIN players p2 ON fm.a2_id = p2.id
+                JOIN players p3 ON fm.b1_id = p3.id
+                JOIN players p4 ON fm.b2_id = p4.id
+                WHERE fm.leaderboard_id = :l_id
+                ORDER BY fm.date ASC
+            """)
+            return conn.execute(query, {"l_id": leaderboard_id}).fetchall()
+
+    @staticmethod
+    def generate_calendar(leaderboard_id: int, matches_per_day: int = 3, days: int = 7):
+        """Generates a random schedule of matches for the next few days."""
+        players_data = DatabaseManager.get_player_names(leaderboard_id)
+        if len(players_data) < 4:
+            return False
+
+        player_ids = [p[0] for p in players_data]
+        
+        # We want to minimize repeat pairings. 
+        # A simple approach: track how many times each pair has played together/against.
+        # For a random generator, we can just shuffle and pick.
+        
+        with engine.begin() as conn:
+            # Clear existing future matches for this leaderboard
+            conn.execute(text("DELETE FROM future_matches WHERE leaderboard_id = :l_id"), {"l_id": leaderboard_id})
+            
+            start_date = datetime.now().replace(hour=18, minute=0, second=0, microsecond=0)
+            
+            future_matches_to_insert = []
+            for d in range(days):
+                current_day = start_date + timedelta(days=d)
+                for m in range(matches_per_day):
+                    match_time = current_day + timedelta(minutes=30 * m)
+                    selected = random.sample(player_ids, 4)
+                    
+                    future_matches_to_insert.append({
+                        "date": match_time,
+                        "a1": selected[0], "a2": selected[1],
+                        "b1": selected[2], "b2": selected[3],
+                        "l_id": leaderboard_id
+                    })
+            
+            if future_matches_to_insert:
+                conn.execute(text("""
+                    INSERT INTO future_matches (date, a1_id, a2_id, b1_id, b2_id, leaderboard_id)
+                    VALUES (:date, :a1, :a2, :b1, :b2, :l_id)
+                """), future_matches_to_insert)
+        st.cache_data.clear()
+        return True
+
+    @staticmethod
+    def get_best_match_for_player(target_player_id: int, available_player_ids: list, leaderboard_id: int):
+        """
+        Generates the 'best match' for target_player_id from available_player_ids.
+        'Best match' means a match where target_player is likely to win AND 
+        gain points over rivals (players close in rating).
+        """
+        
+        # 1. Get all player stats for the leaderboard
+        with get_connection() as conn:
+            query = text("""
+                SELECT p.id, p.name, ps.rating, ps.games
+                FROM players p
+                JOIN player_stats ps ON p.id = ps.player_id
+                WHERE p.is_active = TRUE AND ps.leaderboard_id = :l_id
+            """)
+            all_stats = conn.execute(query, {"l_id": leaderboard_id}).fetchall()
+            
+        stats_dict = {s.id: {"name": s.name, "rating": s.rating, "games": s.games} for s in all_stats}
+        
+        if target_player_id not in available_player_ids:
+            available_player_ids.append(target_player_id)
+            
+        if len(available_player_ids) < 4:
+            return None
+
+        target_rating = stats_dict[target_player_id]["rating"]
+        
+        # Identify rivals: players with rating close to target (e.g., +/- 100)
+        rivals = [s.id for s in all_stats if s.id != target_player_id and abs(s.rating - target_rating) < 150]
+        if not rivals:
+            # If no close rivals, consider everyone a rival for simplicity
+            rivals = [s.id for s in all_stats if s.id != target_player_id]
+
+        best_score = -9999
+        best_match = None
+        
+        # Use a subset if too many players to avoid combinatorial explosion
+        # Limit to 10 available players + target
+        if len(available_player_ids) > 10:
+             # Keep target, and 9 others (prioritize those with ratings close to target or high rating)
+             available_player_ids = sorted(available_player_ids, key=lambda x: abs(stats_dict[x]["rating"] - target_rating))[:10]
+             if target_player_id not in available_player_ids:
+                 available_player_ids[-1] = target_player_id
+
+        # Iterate over all possible combinations of 4 players including target
+        other_players = [p for p in available_player_ids if p != target_player_id]
+        for combo in itertools.combinations(other_players, 3):
+            match_players = [target_player_id] + list(combo)
+            
+            # For these 4 players, try all possible team splits (3 ways)
+            # 1. (T, P1) vs (P2, P3)
+            # 2. (T, P2) vs (P1, P3)
+            # 3. (T, P3) vs (P1, P2)
+            
+            p1, p2, p3 = combo
+            possible_teams = [
+                ((target_player_id, p1), (p2, p3)),
+                ((target_player_id, p2), (p1, p3)),
+                ((target_player_id, p3), (p1, p2))
+            ]
+            
+            for team_a, team_b in possible_teams:
+                # Calculate expected win probability and potential delta
+                r_a = (stats_dict[team_a[0]]["rating"] + stats_dict[team_a[1]]["rating"]) / 2.0
+                r_b = (stats_dict[team_b[0]]["rating"] + stats_dict[team_b[1]]["rating"]) / 2.0
+                
+                exp_a = DatabaseManager._expected_score(r_a, r_b)
+                
+                # We want: 
+                # 1. High exp_a (likely to win)
+                # 2. Good delta if win (not playing against much weaker players)
+                # 3. Rivals in Team B (to take points from them)
+                
+                # Potential delta for a standard 10-8 win (margin 2)
+                # K-factor for target player
+                k = DatabaseManager._get_k_factor(stats_dict[target_player_id]["games"])
+                delta_if_win = k * 1.0 * (1.0 - exp_a)
+                
+                # Rival penalty/bonus: if a rival is in team B, it's good. 
+                # If a rival is in team A, it might be bad (they gain points too).
+                rival_impact = 0
+                for p_id in team_b:
+                    if p_id in rivals:
+                        rival_impact += 1
+                for p_id in team_a:
+                    if p_id == target_player_id: continue
+                    if p_id in rivals:
+                        rival_impact -= 0.5
+                
+                # Heuristic score
+                # prioritize probability of winning but also the gain
+                # score = (win_prob * 0.7 + normalized_delta * 0.3) + rival_impact
+                match_score = (exp_a * 10) + (delta_if_win * 0.5) + (rival_impact * 5)
+                
+                if match_score > best_score:
+                    best_score = match_score
+                    best_match = {
+                        "team_a": (stats_dict[team_a[0]]["name"], stats_dict[team_a[1]]["name"]),
+                        "team_b": (stats_dict[team_b[0]]["name"], stats_dict[team_b[1]]["name"]),
+                        "win_prob": exp_a,
+                        "est_delta": delta_if_win
+                    }
+                    
+        return best_match
 
     @staticmethod
     def delete_match(match_id):

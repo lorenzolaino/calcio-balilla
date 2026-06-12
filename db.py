@@ -73,6 +73,18 @@ def init_db():
         conn.execute(text("ALTER TABLE matches ADD COLUMN IF NOT EXISTS leaderboard_id INTEGER REFERENCES leaderboards(id);"))
 
         conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS future_matches (
+            id SERIAL PRIMARY KEY,
+            date TIMESTAMP NOT NULL,
+            a1_id INTEGER REFERENCES players(id),
+            a2_id INTEGER REFERENCES players(id),
+            b1_id INTEGER REFERENCES players(id),
+            b2_id INTEGER REFERENCES players(id),
+            leaderboard_id INTEGER REFERENCES leaderboards(id)
+        );
+        """))
+
+        conn.execute(text("""
         CREATE TABLE IF NOT EXISTS player_ratings_history (
             id SERIAL PRIMARY KEY,
             player_id INTEGER REFERENCES players(id),

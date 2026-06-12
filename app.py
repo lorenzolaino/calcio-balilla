@@ -6,23 +6,20 @@ from db import init_db
 from models import DatabaseManager
 from streamlit_js_eval import streamlit_js_eval
 
-CURRENT_VERSION = "1.3.0"
+CURRENT_VERSION = "1.4.0"
 
 @st.dialog("🚀 What's New")
 def show_release_notes():
     st.markdown(f"""
-    ### Version {CURRENT_VERSION} - Multi-Leaderboard Update
-    This is a major update introducing isolated competitive environments and refined management roles.
+    ### Version {CURRENT_VERSION} - Strategy & Planning Update
+    This update introduces advanced tools for match planning and competitive strategy.
     
     **New Features**:
-    1.  **Multi-Leaderboard Support**: Switch between **Leaderboard DG** and **Leaderboard UT** (and more in the future) via the sidebar.
-    2.  **Leaderboard Isolation**: Players, statistics, and matches are now strictly scoped to the selected leaderboard.
-    3.  **Refined Management Roles**: 
-        - **Admins** have global control.
-        - **Leader Managers** are now assigned to specific leaderboards.
-    4.  **Performance Optimization**: Database interactions have been refactored for maximum efficiency and minimum latency.
+    1.  **Matchmaking (Leaderboard DG Exclusive)**: A new tool to generate the "Optimal Match." It uses a strategic heuristic to find matches you are likely to win while maximizing Elo gains against your immediate rivals.
+    2.  **Calendar (Leaderboard UT Exclusive)**: A scheduling tool that generates a random match calendar, ensuring a variety of pairings and providing a clear view of upcoming games.
+    3.  **Refined Navigation**: The sidebar now intelligently shows/hides management tools based on your specific permissions for the selected leaderboard.
     
-    **Note for Admins**: Existing data has been migrated to the DG leaderboard. New players added while UT is selected will only appear in that leaderboard.
+    **Note**: Management actions (New Match, Manage Players, etc.) are now strictly visible only to logged-in users with appropriate permissions.
     """)
     if st.button("Got it!"):
         st.session_state['notes_dismissed'] = True
@@ -131,9 +128,20 @@ def run_web_app():
 
     # --- Sidebar Navigation ---
     st.sidebar.title("Actions")
+    actions = ["Leaderboard", "Match History", "Elo Trends"]
+    
+    if selected_l_name == "Leaderboard UT":
+        actions.insert(1, "Calendar")
+    elif selected_l_name == "Leaderboard DG":
+        actions.insert(1, "Matchmaking")
+
+    # Only show management actions if the user has permission for this leaderboard
+    if can_manage():
+        actions.extend(["Manage Players", "New Match", "Delete Match"])
+
     action = st.sidebar.selectbox(
         "Choose", 
-        ["Leaderboard", "Match History", "Elo Trends", "Manage Players", "New Match", "Delete Match"]
+        actions
     )
 
     if action == "Leaderboard":
@@ -157,6 +165,80 @@ def run_web_app():
             "Win %": st.column_config.NumberColumn(format="%.1f%%"),
             "Rating": st.column_config.NumberColumn(format="%.1f")
         })
+
+    elif action == "Calendar":
+        st.subheader("📅 Future Matches")
+        
+        if can_manage():
+            if st.button("Generate Random Schedule"):
+                with st.spinner("Generating schedule..."):
+                    DatabaseManager.generate_calendar(selected_l_id)
+                st.success("New schedule generated!")
+                st.rerun()
+
+        future_matches = DatabaseManager.get_future_matches(selected_l_id)
+        if not future_matches:
+            st.info("No future matches scheduled. Managers can generate a new schedule.")
+        else:
+            table_rows = []
+            for record in future_matches:
+                table_rows.append({
+                    "Date": record[0].strftime("%d/%m/%Y %H:%M"),
+                    "Team A": f"{record[1]} + {record[2]}",
+                    "vs": "vs",
+                    "Team B": f"{record[3]} + {record[4]}",
+                })
+            st.table(table_rows)
+
+    elif action == "Matchmaking":
+        st.subheader("🎯 Optimal Matchmaking")
+        players_data = DatabaseManager.get_player_names(selected_l_id)
+        players_list = [p[1] for p in players_data]
+        player_map = {p[1]: p[0] for p in players_data}
+
+        if len(players_list) < 4:
+            st.warning("At least 4 players are required for matchmaking.")
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                who_am_i = st.selectbox("Who are you?", players_list)
+            with col2:
+                available = st.multiselect("Available players", players_list, default=players_list)
+
+            if st.button("Generate Next Match"):
+                if who_am_i not in available:
+                    available.append(who_am_i)
+                
+                if len(available) < 4:
+                    st.error("Select at least 3 other available players.")
+                else:
+                    target_id = player_map[who_am_i]
+                    available_ids = [player_map[name] for name in available]
+                    
+                    with st.spinner("Finding best match..."):
+                        best = DatabaseManager.get_best_match_for_player(target_id, available_ids, selected_l_id)
+                    
+                    if best:
+                        st.success("Best match found!")
+                        
+                        st.markdown(f"""
+                        <div style="text-align: center; border: 2px solid #4CAF50; border-radius: 10px; padding: 20px; background-color: rgba(76, 175, 80, 0.1);">
+                            <h3 style="margin: 0;">Team A</h3>
+                            <h2 style="margin: 10px 0; color: #4CAF50;">{best['team_a'][0]} & {best['team_a'][1]}</h2>
+                            <h4 style="margin: 10px 0;">VS</h4>
+                            <h3 style="margin: 0;">Team B</h3>
+                            <h2 style="margin: 10px 0; color: #FF5252;">{best['team_b'][0]} & {best['team_b'][1]}</h2>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        st.write("")
+                        col_stat1, col_stat2 = st.columns(2)
+                        with col_stat1:
+                            st.metric("Win Probability", f"{best['win_prob']:.1%}")
+                        with col_stat2:
+                            st.metric("Est. Elo Gain", f"+{best['est_delta']:.1f}")
+                    else:
+                        st.error("Could not generate a match.")
 
     elif action == "Match History":
         st.subheader("📜 Match History")
@@ -241,146 +323,137 @@ def run_web_app():
             st.altair_chart(chart, use_container_width=True)
 
     elif action == "Manage Players":
-        if not can_manage():
-            st.warning(f"You do not have permission to manage {selected_l_name}")
-        else:
-            st.subheader("👥 Manage Players")
-            
-            # --- Add Player Section ---
-            with st.expander("➕ Add New Player"):
-                new_player_name = st.text_input("Player Name")
-                add_btn_placeholder = st.empty()
-                if add_btn_placeholder.button("Add"):
-                    if new_player_name:
-                        add_btn_placeholder.button("Adding...", disabled=True)
-                        with st.spinner("Adding player..."):
-                            DatabaseManager.add_player(new_player_name, selected_l_id)
-                        st.success(f"Player '{new_player_name}' added to {selected_l_name}")
-                        st.rerun()
-                    else:
-                        st.error("Please enter a name")
-
-            st.divider()
-
-            # --- Player Status Management ---
-            st.write("Toggle player active status (Inactive players are hidden from Leaderboard and New Match selection)")
-            all_players = DatabaseManager.get_all_players(selected_l_id)
-            
-            if not all_players:
-                st.info("No players registered.")
-            else:
-                # Prepare data for display
-                df_players = pd.DataFrame(all_players, columns=["ID", "Name", "Active"])
-                
-                # Display editable dataframe
-                edited_df = st.data_editor(
-                    df_players,
-                    column_config={
-                        "Active": st.column_config.CheckboxColumn(
-                            "Active",
-                            help="Uncheck to hide player from leaderboard and selection",
-                            default=True,
-                        ),
-                        "ID": None, # Hide ID column
-                        "Name": st.column_config.TextColumn("Player Name", disabled=True)
-                    },
-                    disabled=["Name"],
-                    hide_index=True,
-                )
-
-                # Check for changes
-                if not edited_df.equals(df_players):
-                    # Identify which row changed
-                    changed_rows = edited_df[edited_df["Active"] != df_players["Active"]]
-                    for _, row in changed_rows.iterrows():
-                        DatabaseManager.toggle_player_status(int(row["ID"]), bool(row["Active"]))
-                    st.success("Changes saved!")
+        st.subheader("👥 Manage Players")
+        
+        # --- Add Player Section ---
+        with st.expander("➕ Add New Player"):
+            new_player_name = st.text_input("Player Name")
+            add_btn_placeholder = st.empty()
+            if add_btn_placeholder.button("Add"):
+                if new_player_name:
+                    add_btn_placeholder.button("Adding...", disabled=True)
+                    with st.spinner("Adding player..."):
+                        DatabaseManager.add_player(new_player_name, selected_l_id)
+                    st.success(f"Player '{new_player_name}' added to {selected_l_name}")
                     st.rerun()
+                else:
+                    st.error("Please enter a name")
+
+        st.divider()
+
+        # --- Player Status Management ---
+        st.write("Toggle player active status (Inactive players are hidden from Leaderboard and New Match selection)")
+        all_players = DatabaseManager.get_all_players(selected_l_id)
+        
+        if not all_players:
+            st.info("No players registered.")
+        else:
+            # Prepare data for display
+            df_players = pd.DataFrame(all_players, columns=["ID", "Name", "Active"])
+            
+            # Display editable dataframe
+            edited_df = st.data_editor(
+                df_players,
+                column_config={
+                    "Active": st.column_config.CheckboxColumn(
+                        "Active",
+                        help="Uncheck to hide player from leaderboard and selection",
+                        default=True,
+                    ),
+                    "ID": None, # Hide ID column
+                    "Name": st.column_config.TextColumn("Player Name", disabled=True)
+                },
+                disabled=["Name"],
+                hide_index=True,
+            )
+
+            # Check for changes
+            if not edited_df.equals(df_players):
+                # Identify which row changed
+                changed_rows = edited_df[edited_df["Active"] != df_players["Active"]]
+                for _, row in changed_rows.iterrows():
+                    DatabaseManager.toggle_player_status(int(row["ID"]), bool(row["Active"]))
+                st.success("Changes saved!")
+                st.rerun()
 
     elif action == "New Match":
-        if not can_manage():
-            st.warning(f"You do not have permission to record matches for {selected_l_name}")
-        else:
-            st.subheader(f"⚽ Record 2vs2 Match for {selected_l_name}")
-            players_data = DatabaseManager.get_player_names(selected_l_id)
-            players_list = [p[1] for p in players_data]
+        st.subheader(f"⚽ Record 2vs2 Match for {selected_l_name}")
+        players_data = DatabaseManager.get_player_names(selected_l_id)
+        players_list = [p[1] for p in players_data]
+        
+        if len(players_list) < 4:
+            st.warning("At least 4 players are required to record a match.")
+            st.stop()
             
-            if len(players_list) < 4:
-                st.warning("At least 4 players are required to record a match.")
-                st.stop()
-                
-            col1, col2 = st.columns(2)
-            with col1:
-                a1 = st.selectbox("Team A - Player 1", players_list, key="a1")
-                a2 = st.selectbox("Team A - Player 2", players_list, key="a2")
-            with col2:
-                b1 = st.selectbox("Team B - Player 1", players_list, key="b1")
-                b2 = st.selectbox("Team B - Player 2", players_list, key="b2")
+        col1, col2 = st.columns(2)
+        with col1:
+            a1 = st.selectbox("Team A - Player 1", players_list, key="a1")
+            a2 = st.selectbox("Team A - Player 2", players_list, key="a2")
+        with col2:
+            b1 = st.selectbox("Team B - Player 1", players_list, key="b1")
+            b2 = st.selectbox("Team B - Player 2", players_list, key="b2")
 
-            col3, col4 = st.columns(2)
-            with col3:
-                score_a = st.number_input("Team A Goals", min_value=0, value=10)
-            with col4:
-                score_b = st.number_input("Team B Goals", min_value=0, value=8)
+        col3, col4 = st.columns(2)
+        with col3:
+            score_a = st.number_input("Team A Goals", min_value=0, value=10)
+        with col4:
+            score_b = st.number_input("Team B Goals", min_value=0, value=8)
 
-            selected_players = {a1, a2, b1, b2}
-            if len(selected_players) < 4:
-                st.error("Each player can only appear once in a match.")
-                st.stop()
+        selected_players = {a1, a2, b1, b2}
+        if len(selected_players) < 4:
+            st.error("Each player can only appear once in a match.")
+            st.stop()
 
-            save_btn_placeholder = st.empty()
-            if save_btn_placeholder.button("Save Match"):
-                try:
-                    save_btn_placeholder.button("Saving Match...", disabled=True)
-                    with st.spinner("Saving match..."):
-                        DatabaseManager.record_match(a1, a2, b1, b2, score_a, score_b, selected_l_id)
-                    st.success(f"✅ Match saved! {selected_l_name} updated.")
-                    st.rerun()
-                except ValueError as error:
-                    st.error(str(error))
-                    # Rerun to restore the active button for correction
-                    st.button("Try Again", on_click=st.rerun)
+        save_btn_placeholder = st.empty()
+        if save_btn_placeholder.button("Save Match"):
+            try:
+                save_btn_placeholder.button("Saving Match...", disabled=True)
+                with st.spinner("Saving match..."):
+                    DatabaseManager.record_match(a1, a2, b1, b2, score_a, score_b, selected_l_id)
+                st.success(f"✅ Match saved! {selected_l_name} updated.")
+                st.rerun()
+            except ValueError as error:
+                st.error(str(error))
+                # Rerun to restore the active button for correction
+                st.button("Try Again", on_click=st.rerun)
 
     elif action == "Delete Match":
-        if not can_manage():
-            st.warning(f"You do not have permission to delete matches for {selected_l_name}")
+        st.subheader(f"🗑️ Delete Match from {selected_l_name}")
+        limit = st.slider("Number of matches to search from", 5, 100, 20)
+        history_data = DatabaseManager.get_match_history(limit, leaderboard_id=selected_l_id)
+
+        if not history_data:
+            st.info("No matches recorded.")
         else:
-            st.subheader(f"🗑️ Delete Match from {selected_l_name}")
-            limit = st.slider("Number of matches to search from", 5, 100, 20)
-            history_data = DatabaseManager.get_match_history(limit, leaderboard_id=selected_l_id)
+            match_options = []
+            match_map = {}
+            for record in history_data:
+                # record index 13 is the id (added in DatabaseManager.get_match_history)
+                label = f"[{record[0].strftime('%d/%m/%Y %H:%M')}] {record[1]}+{record[2]} vs {record[3]}+{record[4]} ({record[5]}-{record[6]})"
+                match_options.append(label)
+                match_map[label] = record[13]
 
-            if not history_data:
-                st.info("No matches recorded.")
-            else:
-                match_options = []
-                match_map = {}
-                for record in history_data:
-                    # record index 13 is the id (added in DatabaseManager.get_match_history)
-                    label = f"[{record[0].strftime('%d/%m/%Y %H:%M')}] {record[1]}+{record[2]} vs {record[3]}+{record[4]} ({record[5]}-{record[6]})"
-                    match_options.append(label)
-                    match_map[label] = record[13]
-
-                selected_match_labels = st.multiselect("Select matches to delete", match_options)
-                
-                delete_btn_placeholder = st.empty()
-                if delete_btn_placeholder.button("Delete Selected Matches", type="primary"):
-                    if not selected_match_labels:
-                        st.warning("Please select at least one match to delete.")
+            selected_match_labels = st.multiselect("Select matches to delete", match_options)
+            
+            delete_btn_placeholder = st.empty()
+            if delete_btn_placeholder.button("Delete Selected Matches", type="primary"):
+                if not selected_match_labels:
+                    st.warning("Please select at least one match to delete.")
+                else:
+                    delete_btn_placeholder.button("Deleting...", type="primary", disabled=True)
+                    success_count = 0
+                    with st.spinner(f"Deleting {len(selected_match_labels)} matches..."):
+                        for label in selected_match_labels:
+                            match_id = match_map[label]
+                            if DatabaseManager.delete_match(match_id):
+                                success_count += 1
+                    
+                    if success_count == len(selected_match_labels):
+                        st.success(f"✅ {success_count} matches deleted and stats restored!")
+                        st.rerun()
                     else:
-                        delete_btn_placeholder.button("Deleting...", type="primary", disabled=True)
-                        success_count = 0
-                        with st.spinner(f"Deleting {len(selected_match_labels)} matches..."):
-                            for label in selected_match_labels:
-                                match_id = match_map[label]
-                                if DatabaseManager.delete_match(match_id):
-                                    success_count += 1
-                        
-                        if success_count == len(selected_match_labels):
-                            st.success(f"✅ {success_count} matches deleted and stats restored!")
-                            st.rerun()
-                        else:
-                            st.warning(f"⚠️ {success_count} of {len(selected_match_labels)} matches deleted.")
-                            st.rerun()
+                        st.warning(f"⚠️ {success_count} of {len(selected_match_labels)} matches deleted.")
+                        st.rerun()
 
 if __name__ == "__main__":
     run_web_app()
