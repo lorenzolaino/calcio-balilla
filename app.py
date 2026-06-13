@@ -144,8 +144,9 @@ def show_elo_trends(l_id):
 
         st.altair_chart(chart, use_container_width=True)
 
-def show_match_history(l_id, limit=20):
+def show_match_history(l_id):
     st.subheader("📜 Match History")
+    limit = st.slider("Matches to show", 5, 200, 20, key=f"limit_{l_id}")
     
     all_players_data = DatabaseManager.get_all_players(l_id)
     player_options = ["All Players"] + [p[1] for p in all_players_data]
@@ -494,8 +495,7 @@ def run_web_app():
             if m_page == "Home":
                 show_leaderboard(selected_l_id, selected_l_name)
             elif m_page == "History":
-                limit = st.slider("Matches", 5, 200, 20)
-                show_match_history(selected_l_id, limit=limit)
+                show_match_history(selected_l_id)
             elif m_page == "Trends":
                 show_elo_trends(selected_l_id)
             elif m_page == "Calendar":
@@ -509,8 +509,7 @@ def run_web_app():
                 with st.container(border=True):
                     show_leaderboard(selected_l_id, selected_l_name)
                 with st.container(border=True):
-                    limit = st.slider("Matches to show", 5, 200, 20)
-                    show_match_history(selected_l_id, limit=limit)
+                    show_match_history(selected_l_id)
             with col2:
                 with st.container(border=True):
                     show_elo_trends(selected_l_id)
