@@ -484,24 +484,21 @@ def run_web_app():
             elif selected_l_name == "Leaderboard DG":
                 nav_options.append("Matchmaking")
             
-            # Bottom Navigation Bar
-            m_page = st.radio(
-                "Nav", nav_options, 
-                index=nav_options.index(current_page) if current_page in nav_options else 0,
-                horizontal=True, label_visibility="collapsed"
-            )
-            st.session_state['current_page'] = m_page
+            # Native Tabs for Mobile Navigation
+            tabs = st.tabs(nav_options)
             
-            if m_page == "Home":
-                show_leaderboard(selected_l_id, selected_l_name)
-            elif m_page == "History":
-                show_match_history(selected_l_id)
-            elif m_page == "Trends":
-                show_elo_trends(selected_l_id)
-            elif m_page == "Calendar":
-                show_calendar(selected_l_id, can_manage())
-            elif m_page == "Matchmaking":
-                show_matchmaking(selected_l_id)
+            for i, tab_name in enumerate(nav_options):
+                with tabs[i]:
+                    if tab_name == "Home":
+                        show_leaderboard(selected_l_id, selected_l_name)
+                    elif tab_name == "History":
+                        show_match_history(selected_l_id)
+                    elif tab_name == "Trends":
+                        show_elo_trends(selected_l_id)
+                    elif tab_name == "Calendar":
+                        show_calendar(selected_l_id, can_manage())
+                    elif tab_name == "Matchmaking":
+                        show_matchmaking(selected_l_id)
         else:
             # Desktop Dashboard
             col1, col2 = st.columns([3, 2])
