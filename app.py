@@ -186,7 +186,7 @@ def show_match_history(l_id, limit=20):
                 "Δ A/B": f"{delta_a_display} / {delta_b_display}"
             })
 
-        st.table(table_rows)
+        st.dataframe(table_rows, hide_index=True, use_container_width=True)
 
 def show_calendar(l_id, can_manage):
     st.subheader("📅 Future Matches")
@@ -208,7 +208,7 @@ def show_calendar(l_id, can_manage):
                 "Date": record[0].strftime("%d/%m/%Y %H:%M"),
                 "Match": f"{record[1]} + {record[2]} vs {record[3]} + {record[4]}",
             })
-        st.table(table_rows)
+        st.dataframe(table_rows, hide_index=True, use_container_width=True)
 
 def show_matchmaking(l_id):
     st.subheader("🎯 Matchmaking")
