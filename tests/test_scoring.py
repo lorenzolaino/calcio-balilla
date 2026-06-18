@@ -14,6 +14,56 @@ sys.modules['streamlit'] = mock_st
 
 from models import DatabaseManager
 
+def legacy_calculate_match_updates(players, goals_a, goals_b, rating_diff_threshold):
+    a1, a2, b1, b2 = [list(player) for player in players]
+    margin = abs(goals_a - goals_b)
+
+    r_a = (a1[2] + a2[2]) / 2.0
+    r_b = (b1[2] + b2[2]) / 2.0
+    e_a = DatabaseManager._expected_score(r_a, r_b)
+    s_a = 1.0 if goals_a > goals_b else 0.0
+    m = DatabaseManager._margin_multiplier(margin)
+
+    multiplier = 1.0
+    team_diff = r_a - r_b
+    is_a_favored = team_diff > 0
+
+    if abs(team_diff) > rating_diff_threshold:
+        if (is_a_favored and s_a == 1.0) or (not is_a_favored and s_a == 0.0):
+            multiplier = 0.5
+        else:
+            multiplier = 1.5
+
+    delta_a1 = round(DatabaseManager._get_k_factor(a1[3]) * m * multiplier * (s_a - e_a), 1)
+    delta_a2 = round(DatabaseManager._get_k_factor(a2[3]) * m * multiplier * (s_a - e_a), 1)
+    delta_b1 = round(DatabaseManager._get_k_factor(b1[3]) * m * multiplier * ((1 - s_a) - (1 - e_a)), 1)
+    delta_b2 = round(DatabaseManager._get_k_factor(b2[3]) * m * multiplier * ((1 - s_a) - (1 - e_a)), 1)
+
+    a1[2] += delta_a1; a2[2] += delta_a2
+    b1[2] += delta_b1; b2[2] += delta_b2
+
+    for p in [a1, a2, b1, b2]:
+        p[3] += 1
+
+    if s_a == 1:
+        a1[4] += 1; a2[4] += 1; b1[5] += 1; b2[5] += 1
+    else:
+        b1[4] += 1; b2[4] += 1; a1[5] += 1; a2[5] += 1
+
+    gd_a = goals_a - goals_b
+    a1[6] += gd_a; a2[6] += gd_a; b1[6] -= gd_a; b2[6] -= gd_a
+
+    for i, p in enumerate([a1, a2, b1, b2]):
+        is_win = (i < 2 and s_a == 1) or (i >= 2 and s_a == 0)
+        res_char = 'W' if is_win else 'L'
+
+        current_trend = p[7] if p[7] else ""
+        parts = current_trend.split()
+        new_parts = ([res_char] + parts)[:5]
+        p[7] = " ".join(new_parts)
+
+    return [a1, a2, b1, b2], (delta_a1, delta_a2, delta_b1, delta_b2)
+
 class TestScoringLogic(unittest.TestCase):
 
     def test_k_factor_continuous(self):
@@ -26,6 +76,70 @@ class TestScoringLogic(unittest.TestCase):
         self.assertAlmostEqual(DatabaseManager._get_k_factor(200), 13.3333333)
         # Large number of games: should approach 10
         self.assertAlmostEqual(DatabaseManager._get_k_factor(100000), 10.0, places=1)
+
+    def test_calculate_match_updates_is_pure_and_updates_stats(self):
+        """Verifies the Elo calculation without database mocks."""
+        players = [
+            [1, 'A1', 1000.0, 0, 0, 0, 0, 'W L'],
+            [2, 'A2', 1000.0, 0, 0, 0, 0, ''],
+            [3, 'B1', 1000.0, 0, 0, 0, 0, 'L W'],
+            [4, 'B2', 1000.0, 0, 0, 0, 0, ''],
+        ]
+
+        updated, deltas = DatabaseManager._calculate_match_updates(players, 10, 8, 0.0)
+
+        self.assertEqual(deltas, (15.0, 15.0, -15.0, -15.0))
+        self.assertEqual([p[3] for p in updated], [1, 1, 1, 1])
+        self.assertEqual([p[4] for p in updated], [1, 1, 0, 0])
+        self.assertEqual([p[5] for p in updated], [0, 0, 1, 1])
+        self.assertEqual([p[6] for p in updated], [2, 2, -2, -2])
+        self.assertEqual([p[7] for p in updated], ['W W L', 'W', 'L L W', 'L'])
+        self.assertEqual(players[0][2], 1000.0)
+
+    def test_calculate_match_updates_matches_legacy_inline_logic(self):
+        """Locks the refactor against the previous inline scoring implementation."""
+        scenarios = [
+            (
+                [
+                    [1, 'A1', 1200.0, 10, 5, 5, 2, 'W L W'],
+                    [2, 'A2', 1100.0, 40, 20, 20, -1, 'L W'],
+                    [3, 'B1', 1000.0, 100, 50, 50, 3, 'W W L'],
+                    [4, 'B2', 900.0, 200, 100, 100, -4, 'L L W'],
+                ],
+                10,
+                5,
+                150.0,
+            ),
+            (
+                [
+                    [1, 'A1', 1200.0, 10, 5, 5, 2, 'W L W'],
+                    [2, 'A2', 1100.0, 40, 20, 20, -1, 'L W'],
+                    [3, 'B1', 1000.0, 100, 50, 50, 3, 'W W L'],
+                    [4, 'B2', 900.0, 200, 100, 100, -4, 'L L W'],
+                ],
+                5,
+                10,
+                150.0,
+            ),
+            (
+                [
+                    [1, 'A1', 1000.0, 0, 0, 0, 0, ''],
+                    [2, 'A2', 1000.0, 39, 20, 19, 1, 'W W W W W'],
+                    [3, 'B1', 1000.0, 40, 19, 21, -1, 'L L L L L'],
+                    [4, 'B2', 1000.0, 200, 90, 110, -8, 'W L W L W'],
+                ],
+                10,
+                0,
+                0.0,
+            ),
+        ]
+
+        for players, goals_a, goals_b, threshold in scenarios:
+            with self.subTest(goals_a=goals_a, goals_b=goals_b, threshold=threshold):
+                self.assertEqual(
+                    DatabaseManager._calculate_match_updates(players, goals_a, goals_b, threshold),
+                    legacy_calculate_match_updates(players, goals_a, goals_b, threshold),
+                )
 
     @patch('models.engine')
     def test_individual_scoring_and_farming(self, mock_engine):

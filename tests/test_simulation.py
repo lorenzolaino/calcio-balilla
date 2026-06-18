@@ -20,6 +20,7 @@ class TestSeasonSimulation(unittest.TestCase):
     @patch('models.engine')
     def test_mini_season_simulation(self, mock_engine):
         """Simulates 100 matches to see if the leaderboard stabilizes logically."""
+        random.seed(20260618)
         mock_conn = MagicMock()
         mock_engine.begin.return_value.__enter__.return_value = mock_conn
 
