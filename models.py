@@ -9,6 +9,7 @@ from db import get_connection, engine
 
 class DatabaseManager:
     """Manages all database interactions and business logic for the application."""
+    RECENT_DUPLICATE_MATCH_WINDOW_SECONDS = 15
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -199,6 +200,43 @@ class DatabaseManager:
         # Starts at 30.0, drops to 20.0 at 40 games, ~15 at 120 games.
         # Asymptotic to 10.0
         return 10.0 + (20.0 / (1.0 + (games / 40.0)))
+
+    @staticmethod
+    def _get_recent_duplicate_match_id(conn, a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, leaderboard_id):
+        """Returns a recent matching record that likely came from a duplicate submit."""
+        cutoff = datetime.now() - timedelta(seconds=DatabaseManager.RECENT_DUPLICATE_MATCH_WINDOW_SECONDS)
+        duplicate_query = text("""
+            SELECT id
+            FROM matches
+            WHERE leaderboard_id = :l_id
+              AND date >= :cutoff
+              AND (
+                (
+                    goals_a = :ga AND goals_b = :gb
+                    AND a1_id IN (:a1, :a2) AND a2_id IN (:a1, :a2)
+                    AND b1_id IN (:b1, :b2) AND b2_id IN (:b1, :b2)
+                )
+                OR
+                (
+                    goals_a = :gb AND goals_b = :ga
+                    AND a1_id IN (:b1, :b2) AND a2_id IN (:b1, :b2)
+                    AND b1_id IN (:a1, :a2) AND b2_id IN (:a1, :a2)
+                )
+              )
+            ORDER BY date DESC
+            LIMIT 1
+        """)
+        row = conn.execute(duplicate_query, {
+            "l_id": leaderboard_id,
+            "cutoff": cutoff,
+            "a1": a1_id,
+            "a2": a2_id,
+            "b1": b1_id,
+            "b2": b2_id,
+            "ga": goals_a,
+            "gb": goals_b,
+        }).fetchone()
+        return row[0] if row and isinstance(row[0], int) else None
 
     @staticmethod
     @st.cache_data
@@ -505,6 +543,12 @@ class DatabaseManager:
             existing = {r.name: list(r) for r in res.fetchall()}
 
             a1, a2, b1, b2 = [existing[name] for name in names]
+
+            duplicate_match_id = DatabaseManager._get_recent_duplicate_match_id(
+                conn, a1[0], a2[0], b1[0], b2[0], goals_a, goals_b, leaderboard_id
+            )
+            if duplicate_match_id:
+                raise ValueError("This match was saved a few seconds ago. Wait before saving the same match again.")
 
             # Elo Calculation
             r_a = (a1[2] + a2[2]) / 2.0

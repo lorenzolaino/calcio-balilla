@@ -261,25 +261,45 @@ def show_new_match(l_id):
         st.warning("At least 4 players required.")
         return
 
+    player_options = ["-"] + players_list
+    saving_key = f"match_save_in_progress_{l_id}"
+    form_version_key = f"match_form_version_{l_id}"
+    form_version = st.session_state.get(form_version_key, 0)
+    form_key_prefix = f"admin_match_{l_id}_{form_version}"
+
     col1, col2 = st.columns(2)
     with col1:
-        a1 = st.selectbox("Team A - P1", players_list, key="admin_a1")
-        a2 = st.selectbox("Team A - P2", players_list, key="admin_a2")
-        score_a = st.number_input("Team A Goals", min_value=0, value=10, key="admin_sa")
+        a1 = st.selectbox("Team A - P1", player_options, index=0, key=f"{form_key_prefix}_a1")
+        a2 = st.selectbox("Team A - P2", player_options, index=0, key=f"{form_key_prefix}_a2")
+        score_a = st.number_input("Team A Goals", min_value=0, value=10, key=f"{form_key_prefix}_sa")
     with col2:
-        b1 = st.selectbox("Team B - P1", players_list, key="admin_b1")
-        b2 = st.selectbox("Team B - P2", players_list, key="admin_b2")
-        score_b = st.number_input("Team B Goals", min_value=0, value=8, key="admin_sb")
+        b1 = st.selectbox("Team B - P1", player_options, index=0, key=f"{form_key_prefix}_b1")
+        b2 = st.selectbox("Team B - P2", player_options, index=0, key=f"{form_key_prefix}_b2")
+        score_b = st.number_input("Team B Goals", min_value=0, value=8, key=f"{form_key_prefix}_sb")
 
-    if st.button("Save Match", type="primary", use_container_width=True):
-        if len({a1, a2, b1, b2}) < 4:
+    save_btn_placeholder = st.empty()
+    save_clicked = save_btn_placeholder.button(
+        "Save Match",
+        type="primary",
+        use_container_width=True,
+        disabled=st.session_state.get(saving_key, False),
+    )
+    if save_clicked:
+        if "-" in {a1, a2, b1, b2}:
+            st.error("Select all four players.")
+        elif len({a1, a2, b1, b2}) < 4:
             st.error("Duplicate players!")
         else:
             try:
+                st.session_state[saving_key] = True
+                save_btn_placeholder.button("Saving Match...", disabled=True, use_container_width=True)
                 DatabaseManager.record_match(a1, a2, b1, b2, score_a, score_b, l_id)
                 st.success("Match saved!")
+                st.session_state[form_version_key] = form_version + 1
+                st.session_state.pop(saving_key, None)
                 st.rerun()
             except ValueError as e:
+                st.session_state[saving_key] = False
                 st.error(str(e))
 
 def show_delete_match(l_id):

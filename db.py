@@ -71,6 +71,10 @@ def init_db():
         );
         """))
         conn.execute(text("ALTER TABLE matches ADD COLUMN IF NOT EXISTS leaderboard_id INTEGER REFERENCES leaderboards(id);"))
+        conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_matches_leaderboard_date
+        ON matches (leaderboard_id, date DESC);
+        """))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS future_matches (
