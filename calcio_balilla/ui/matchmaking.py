@@ -24,6 +24,7 @@ def show_matchmaking(l_id):
     players_data = get_app().get_player_names(l_id)
     players_list = [p.name for p in players_data]
     player_map = {p.name: p.id for p in players_data}
+    key_prefix = f"mm_{l_id}"
 
     if len(players_list) < 4:
         st.warning("Need 4+ players.")
@@ -31,11 +32,16 @@ def show_matchmaking(l_id):
 
     col1, col2 = st.columns(2)
     with col1:
-        who_am_i = st.selectbox("Who are you?", players_list, key="mm_who")
+        who_am_i = st.selectbox("Who are you?", players_list, key=f"{key_prefix}_who")
     with col2:
-        available = st.multiselect("Available players", players_list, default=players_list, key="mm_avail")
+        available = st.multiselect(
+            "Available players",
+            players_list,
+            default=players_list,
+            key=f"{key_prefix}_avail",
+        )
 
-    if st.button("Find Best Match"):
+    if st.button("Find Best Match", key=f"{key_prefix}_find"):
         if who_am_i not in available:
             available.append(who_am_i)
         
