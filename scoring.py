@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from calcio_balilla.core.domain import MatchPlayerState
+
 
 RECENT_DUPLICATE_MATCH_WINDOW_SECONDS = 15
 
@@ -84,6 +86,32 @@ def calculate_match_updates(players, goals_a, goals_b, rating_diff_threshold):
         player[7] = " ".join(([res_char] + parts)[:5])
 
     return [a1, a2, b1, b2], deltas
+
+
+def calculate_match_updates_for_states(players: list[MatchPlayerState], goals_a, goals_b, rating_diff_threshold):
+    updated_players, deltas = calculate_match_updates(
+        [
+            [p.id, p.name, p.rating, p.games, p.wins, p.losses, p.goal_diff, p.trend]
+            for p in players
+        ],
+        goals_a,
+        goals_b,
+        rating_diff_threshold,
+    )
+
+    return [
+        MatchPlayerState(
+            id=player[0],
+            name=player[1],
+            rating=player[2],
+            games=player[3],
+            wins=player[4],
+            losses=player[5],
+            goal_diff=player[6],
+            trend=player[7],
+        )
+        for player in updated_players
+    ], deltas
 
 
 def is_same_match(candidate, existing):
