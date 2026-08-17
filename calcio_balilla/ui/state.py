@@ -5,6 +5,8 @@ PAGE_HOME = "Home"
 PAGE_NEW_MATCH = "New Match"
 PAGE_MANAGE_PLAYERS = "Manage Players"
 PAGE_DELETE_MATCH = "Delete Match"
+PAGE_SEASONS = "Seasons"
+PAGE_SEASON_ADMIN = "Manage Season"
 
 SESSION_USER = "user"
 SESSION_CURRENT_PAGE = "current_page"

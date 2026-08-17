@@ -87,6 +87,15 @@ class UserSession:
 
 
 @dataclass(frozen=True)
+class Season:
+    id: int
+    leaderboard_id: int
+    number: int
+    name: str
+    is_active: bool
+
+
+@dataclass(frozen=True)
 class MatchRecord:
     a1_id: int
     a2_id: int
@@ -99,6 +108,7 @@ class MatchRecord:
     delta_b1: float
     delta_b2: float
     leaderboard_id: int
+    season_id: int
 
 
 @dataclass

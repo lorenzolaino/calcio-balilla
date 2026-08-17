@@ -4,7 +4,11 @@ from calcio_balilla.ui.presenters import format_leaderboard_row
 from calcio_balilla.ui.services import get_app
 
 def show_leaderboard(l_id, l_name):
-    st.subheader("🏆 Leaderboard")
+    active_season = get_app().get_active_season(l_id)
+    title = "🏆 Leaderboard"
+    if active_season:
+        title = f"🏆 Leaderboard · {active_season.name}"
+    st.subheader(title)
     leaderboard_data = get_app().get_leaderboard(l_id)
     
     if not leaderboard_data:

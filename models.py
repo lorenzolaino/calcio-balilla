@@ -32,8 +32,22 @@ class DatabaseManager:
 
     @staticmethod
     @st.cache_data
-    def get_leaderboard(leaderboard_id: int):
-        return _facade().get_leaderboard(leaderboard_id)
+    def get_active_season(leaderboard_id: int):
+        return _facade().get_active_season(leaderboard_id)
+
+    @staticmethod
+    @st.cache_data
+    def get_closed_seasons(leaderboard_id: int):
+        return _facade().get_closed_seasons(leaderboard_id)
+
+    @staticmethod
+    def start_next_season(leaderboard_id: int):
+        return _facade().start_next_season(leaderboard_id)
+
+    @staticmethod
+    @st.cache_data
+    def get_leaderboard(leaderboard_id: int, season_id=None):
+        return _facade().get_leaderboard(leaderboard_id, season_id=season_id)
 
     @staticmethod
     def add_player(name: str, leaderboard_id: int):
@@ -45,13 +59,13 @@ class DatabaseManager:
 
     @staticmethod
     @st.cache_data
-    def get_match_history(limit=50, player_id=None, leaderboard_id=None):
-        return _facade().get_match_history(limit=limit, player_id=player_id, leaderboard_id=leaderboard_id)
+    def get_match_history(limit=50, player_id=None, leaderboard_id=None, season_id=None):
+        return _facade().get_match_history(limit=limit, player_id=player_id, leaderboard_id=leaderboard_id, season_id=season_id)
 
     @staticmethod
     @st.cache_data
-    def get_elo_history(leaderboard_id=None):
-        return _facade().get_elo_history(leaderboard_id=leaderboard_id)
+    def get_elo_history(leaderboard_id=None, season_id=None):
+        return _facade().get_elo_history(leaderboard_id=leaderboard_id, season_id=season_id)
 
     @staticmethod
     @st.cache_data

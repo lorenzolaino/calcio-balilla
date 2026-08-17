@@ -12,7 +12,7 @@ from calcio_balilla.ui.state import (
 )
 
 
-CURRENT_VERSION = "1.4.0"
+CURRENT_VERSION = "1.5.0"
 MOBILE_THRESHOLD = 768
 
 GLOBAL_STYLES = """

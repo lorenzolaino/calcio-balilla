@@ -5,9 +5,11 @@ import scoring
 from calcio_balilla.cache import StreamlitCacheManager
 from calcio_balilla.core.calendar_service import CalendarService
 from calcio_balilla.core.match_service import MatchService
+from calcio_balilla.core.season_service import SeasonService
 from calcio_balilla.data.leaderboard_repository import LeaderboardRepository
 from calcio_balilla.data.match_repository import MatchRepository
 from calcio_balilla.data.player_repository import PlayerRepository
+from calcio_balilla.data.season_repository import SeasonRepository
 from calcio_balilla.data.user_repository import UserRepository
 
 
@@ -29,11 +31,17 @@ class ApplicationFacade:
     def user_repo(self):
         return UserRepository(engine=self.engine, get_connection=self.get_connection)
 
+    def season_repo(self):
+        return SeasonRepository(engine=self.engine, get_connection=self.get_connection)
+
     def match_service(self):
         return MatchService(engine=self.engine, get_connection=self.get_connection)
 
     def calendar_service(self):
         return CalendarService(engine=self.engine, get_connection=self.get_connection)
+
+    def season_service(self):
+        return SeasonService(engine=self.engine, get_connection=self.get_connection)
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -42,8 +50,19 @@ class ApplicationFacade:
     def get_leaderboards(self):
         return self.leaderboard_repo().get_leaderboards()
 
-    def get_leaderboard(self, leaderboard_id: int):
-        return self.player_repo().get_leaderboard(leaderboard_id)
+    def get_active_season(self, leaderboard_id: int):
+        return self.season_repo().get_active_season(leaderboard_id)
+
+    def get_closed_seasons(self, leaderboard_id: int):
+        return self.season_repo().get_closed_seasons(leaderboard_id)
+
+    def start_next_season(self, leaderboard_id: int):
+        season = self.season_service().start_next_season(leaderboard_id)
+        self.cache_manager.invalidate_all()
+        return season
+
+    def get_leaderboard(self, leaderboard_id: int, season_id: int = None):
+        return self.player_repo().get_leaderboard(leaderboard_id, season_id=season_id)
 
     def add_player(self, name: str, leaderboard_id: int):
         player_id = self.player_repo().add_player(name, leaderboard_id)
@@ -54,15 +73,16 @@ class ApplicationFacade:
         self.player_repo().toggle_player_status(player_id, is_active)
         self.cache_manager.invalidate_all()
 
-    def get_match_history(self, limit=50, player_id=None, leaderboard_id=None):
+    def get_match_history(self, limit=50, player_id=None, leaderboard_id=None, season_id=None):
         return self.match_repo().get_match_history(
             limit=limit,
             player_id=player_id,
             leaderboard_id=leaderboard_id,
+            season_id=season_id,
         )
 
-    def get_elo_history(self, leaderboard_id=None):
-        return self.player_repo().get_elo_history(leaderboard_id=leaderboard_id)
+    def get_elo_history(self, leaderboard_id=None, season_id=None):
+        return self.player_repo().get_elo_history(leaderboard_id=leaderboard_id, season_id=season_id)
 
     def check_login(self, username, password):
         hashed_password = self.hash_password(password)

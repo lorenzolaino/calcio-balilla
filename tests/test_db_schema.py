@@ -43,6 +43,10 @@ class TestDatabaseSchema(unittest.TestCase):
         executed_sql = "\n".join(str(call[0][0]).lower() for call in mock_conn.execute.call_args_list)
         self.assertIn("create index if not exists idx_matches_leaderboard_date", executed_sql)
         self.assertIn("on matches (leaderboard_id, date desc)", executed_sql)
+        self.assertIn("create table if not exists seasons", executed_sql)
+        self.assertIn("alter table matches add column if not exists season_id", executed_sql)
+        self.assertIn("alter table player_stats add column if not exists season_id", executed_sql)
+        self.assertIn("alter table player_ratings_history add column if not exists season_id", executed_sql)
 
 
 if __name__ == "__main__":

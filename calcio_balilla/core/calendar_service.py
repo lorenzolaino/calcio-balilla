@@ -4,14 +4,16 @@ from datetime import datetime, timedelta
 from db import engine as default_engine
 from calcio_balilla.data.player_repository import PlayerRepository
 from calcio_balilla.data.match_repository import MatchRepository
+from calcio_balilla.data.season_repository import SeasonRepository
 import scoring
 
 class CalendarService:
-    def __init__(self, engine=None, player_repo=None, match_repo=None, get_connection=None):
+    def __init__(self, engine=None, player_repo=None, match_repo=None, season_repo=None, get_connection=None):
         self.engine = engine or default_engine
         self._get_connection = get_connection
         self.player_repo = player_repo or PlayerRepository(self.engine, self._get_connection)
         self.match_repo = match_repo or MatchRepository(self.engine, self._get_connection)
+        self.season_repo = season_repo or SeasonRepository(self.engine, self._get_connection)
 
     def generate_calendar(self, leaderboard_id: int, matches_per_day: int = 3, days: int = 7):
         players_data = self.player_repo.get_player_names(leaderboard_id)
@@ -19,6 +21,7 @@ class CalendarService:
             return False
 
         player_ids = [player.id for player in players_data]
+        active_season = self.season_repo.get_active_season(leaderboard_id)
         
         with self.engine.begin() as conn:
             self.match_repo.delete_future_matches(conn, leaderboard_id)
@@ -36,7 +39,8 @@ class CalendarService:
                         "date": match_time,
                         "a1": selected[0], "a2": selected[1],
                         "b1": selected[2], "b2": selected[3],
-                        "l_id": leaderboard_id
+                        "l_id": leaderboard_id,
+                        "s_id": active_season.id,
                     })
             
             if future_matches_to_insert:
@@ -44,7 +48,8 @@ class CalendarService:
         return True
 
     def get_best_match_for_player(self, target_player_id: int, available_player_ids: list, leaderboard_id: int):
-        all_stats = self.player_repo.get_active_players_ratings_games(leaderboard_id)
+        active_season = self.season_repo.get_active_season(leaderboard_id)
+        all_stats = self.player_repo.get_active_players_ratings_games(leaderboard_id, active_season.id)
         stats_dict = {s.id: {"name": s.name, "rating": s.rating, "games": s.games} for s in all_stats}
         
         if target_player_id not in available_player_ids:

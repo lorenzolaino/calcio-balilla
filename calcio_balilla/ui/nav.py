@@ -4,10 +4,13 @@ from calcio_balilla.ui.state import (
     PAGE_HOME,
     PAGE_MANAGE_PLAYERS,
     PAGE_NEW_MATCH,
+    PAGE_SEASON_ADMIN,
+    PAGE_SEASONS,
     can_manage,
     get_current_page,
     get_selected_leaderboard_name,
     get_user,
+    is_authenticated,
     is_guest_user,
     logout_user,
     set_current_page,
@@ -18,6 +21,8 @@ from calcio_balilla.ui.match_history import show_match_history
 from calcio_balilla.ui.matchmaking import show_matchmaking
 from calcio_balilla.ui.match_management import show_new_match, show_delete_match
 from calcio_balilla.ui.admin import show_manage_players
+from calcio_balilla.ui.season_admin import show_season_admin
+from calcio_balilla.ui.seasons import show_seasons_archive
 
 
 def _set_current_page(page_name: str):
@@ -68,6 +73,12 @@ def _render_management_page(current_page, selected_l_id, selected_l_name):
     if current_page == PAGE_DELETE_MATCH:
         show_delete_match(selected_l_id)
         return True
+    if current_page == PAGE_SEASONS:
+        show_seasons_archive(selected_l_id, selected_l_name)
+        return True
+    if current_page == PAGE_SEASON_ADMIN:
+        show_season_admin(selected_l_id, selected_l_name)
+        return True
     return False
 
 
@@ -76,6 +87,9 @@ def render_sidebar(selected_l_id):
         st.title("Navigation")
         if st.button("🏠 Home / Dashboard", use_container_width=True):
             _set_current_page(PAGE_HOME)
+
+        if st.button("📚 Seasons", use_container_width=True):
+            _set_current_page(PAGE_SEASONS)
             
         if can_manage(selected_l_id):
             st.divider()
@@ -86,6 +100,9 @@ def render_sidebar(selected_l_id):
                 _set_current_page(PAGE_MANAGE_PLAYERS)
             if st.button("🗑️ Delete Match", use_container_width=True):
                 _set_current_page(PAGE_DELETE_MATCH)
+            if is_authenticated() and not is_guest_user():
+                if st.button("🛠️ Manage Season", use_container_width=True):
+                    _set_current_page(PAGE_SEASON_ADMIN)
 
         st.divider()
         st.subheader("Account")
