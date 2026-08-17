@@ -15,7 +15,6 @@ from calcio_balilla.ui.state import (
 )
 from calcio_balilla.ui.dashboard import show_leaderboard, show_elo_trends
 from calcio_balilla.ui.match_history import show_match_history
-from calcio_balilla.ui.calendar import show_calendar
 from calcio_balilla.ui.matchmaking import show_matchmaking
 from calcio_balilla.ui.match_management import show_new_match, show_delete_match
 from calcio_balilla.ui.admin import show_manage_players
@@ -28,9 +27,7 @@ def _set_current_page(page_name: str):
 
 def _render_mobile_home(selected_l_id, selected_l_name):
     nav_options = ["Home", "History", "Trends"]
-    if selected_l_name == "Leaderboard UT":
-        nav_options.append("Calendar")
-    elif selected_l_name == "Leaderboard DG":
+    if selected_l_name in {"Leaderboard UT", "Leaderboard DG"}:
         nav_options.append("Matchmaking")
 
     tabs = st.tabs(nav_options)
@@ -42,8 +39,6 @@ def _render_mobile_home(selected_l_id, selected_l_name):
                 show_match_history(selected_l_id)
             elif tab_name == "Trends":
                 show_elo_trends(selected_l_id)
-            elif tab_name == "Calendar":
-                show_calendar(selected_l_id, can_manage(selected_l_id))
             elif tab_name == "Matchmaking":
                 show_matchmaking(selected_l_id)
 
@@ -58,10 +53,7 @@ def _render_desktop_home(selected_l_id, selected_l_name):
     with col2:
         with st.container(border=True):
             show_elo_trends(selected_l_id)
-        if selected_l_name == "Leaderboard UT":
-            with st.container(border=True):
-                show_calendar(selected_l_id, can_manage(selected_l_id))
-        elif selected_l_name == "Leaderboard DG":
+        if selected_l_name in {"Leaderboard UT", "Leaderboard DG"}:
             with st.container(border=True):
                 show_matchmaking(selected_l_id)
 
