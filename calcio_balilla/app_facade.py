@@ -91,6 +91,9 @@ class ApplicationFacade:
     def get_player_names(self, leaderboard_id: int):
         return self.player_repo().get_player_names(leaderboard_id)
 
+    def get_player_badges(self, leaderboard_id: int):
+        return self.player_repo().get_player_badges(leaderboard_id)
+
     def get_all_players(self, leaderboard_id: int):
         return self.player_repo().get_all_players(leaderboard_id)
 

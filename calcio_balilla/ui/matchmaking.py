@@ -22,34 +22,35 @@ def _render_match_suggestion(best_match):
 def show_matchmaking(l_id):
     st.subheader("🎯 Matchmaking")
     players_data = get_app().get_player_names(l_id)
-    players_list = [p.name for p in players_data]
-    player_map = {p.name: p.id for p in players_data}
-    key_prefix = f"mm_{l_id}"
-
-    if len(players_list) < 4:
+    if len(players_data) < 4:
         st.warning("Need 4+ players.")
         return
 
+    badges = get_app().get_player_badges(l_id)
+    display_to_player = {f"{p.name} {badges.get(p.name, '')}".strip(): p for p in players_data}
+    display_list = list(display_to_player.keys())
+    key_prefix = f"mm_{l_id}"
+
     col1, col2 = st.columns(2)
     with col1:
-        who_am_i = st.selectbox("Who are you?", players_list, key=f"{key_prefix}_who")
+        who_am_i_lbl = st.selectbox("Who are you?", display_list, key=f"{key_prefix}_who")
     with col2:
-        available = st.multiselect(
+        available_lbls = st.multiselect(
             "Available players",
-            players_list,
-            default=players_list,
+            display_list,
+            default=display_list,
             key=f"{key_prefix}_avail",
         )
 
     if st.button("Find Best Match", key=f"{key_prefix}_find"):
-        if who_am_i not in available:
-            available.append(who_am_i)
+        if who_am_i_lbl not in available_lbls:
+            available_lbls.append(who_am_i_lbl)
         
-        if len(available) < 4:
+        if len(available_lbls) < 4:
             st.error("Select at least 3 others.")
         else:
-            target_id = player_map[who_am_i]
-            available_ids = [player_map[name] for name in available]
+            target_id = display_to_player[who_am_i_lbl].id
+            available_ids = [display_to_player[lbl].id for lbl in available_lbls]
             
             with st.spinner("Calculating..."):
                 best = get_app().get_best_match_for_player(target_id, available_ids, l_id)

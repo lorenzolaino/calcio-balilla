@@ -77,5 +77,26 @@ class TestPlayerManagement(unittest.TestCase):
         self.assertEqual(params["status"], False)
         self.assertEqual(params["pid"], 1)
 
+    @patch('models.get_connection')
+    def test_get_player_badges(self, mock_get_conn):
+        """Verifies that get_player_badges executes query to fetch badges for closed season."""
+        mock_conn = MagicMock()
+        mock_get_conn.return_value.__enter__.return_value = mock_conn
+        
+        # Mock closed season query returning a season row
+        mock_conn.execute.return_value.fetchone.return_value = (1,)
+        # Mock top 3 players query returning 3 players
+        mock_conn.execute.return_value.fetchall.return_value = [("Mario",), ("Luigi",), ("Peppe",)]
+        
+        badges = DatabaseManager.get_player_badges(1)
+        self.assertEqual(badges, {"Mario": "🥇", "Luigi": "🥈", "Peppe": "🥉"})
+
+    def test_format_leaderboard_row_with_badge(self):
+        from calcio_balilla.ui.presenters import format_leaderboard_row
+        from calcio_balilla.core.domain import PlayerStandings
+        player = PlayerStandings(name="Mario", rating=1200.0, games=5, wins=4, losses=1, goal_diff=10, trend="W W")
+        row = format_leaderboard_row(0, player, badge="🥇")
+        self.assertEqual(row["Player"], "Mario 🥇")
+
 if __name__ == '__main__':
     unittest.main()

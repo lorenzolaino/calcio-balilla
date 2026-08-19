@@ -15,8 +15,10 @@ def show_leaderboard(l_id, l_name):
         st.info("No stats available for this leaderboard.")
         return
 
+    badges = get_app().get_player_badges(l_id)
+
     st.dataframe([
-        format_leaderboard_row(index, player)
+        format_leaderboard_row(index, player, badge=badges.get(player.name, ""))
         for index, player in enumerate(leaderboard_data)
     ], hide_index=True, column_config={
         "Win %": st.column_config.NumberColumn(format="%.1f%%"),

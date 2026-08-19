@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 import pandas as pd
 from sqlalchemy import text
 from db import engine as default_engine
 from calcio_balilla.core.domain import Player, PlayerStandings, PlayerStats, PlayerMatchStats
-
 
 def _row_dict(row, fields):
     if hasattr(row, "_mapping"):
@@ -13,11 +14,41 @@ def _row_dict(row, fields):
             return {field: data[field] for field in fields}
     return {field: row[index] for index, field in enumerate(fields)}
 
-
 class PlayerRepository:
     def __init__(self, engine=None, get_connection=None):
         self.engine = engine or default_engine
         self._get_connection = get_connection or self.engine.connect
+
+    def get_player_badges(self, leaderboard_id: int) -> dict[str, str]:
+        with self._get_connection() as conn:
+            closed_season = conn.execute(text("""
+                SELECT id
+                FROM seasons
+                WHERE leaderboard_id = :l_id AND is_active = FALSE AND closed_at IS NOT NULL
+                ORDER BY number DESC
+                LIMIT 1
+            """), {"l_id": leaderboard_id}).fetchone()
+
+            if not closed_season:
+                return {}
+
+            closed_season_id = _row_dict(closed_season, ("id",))["id"]
+
+            rows = conn.execute(text("""
+                SELECT p.name
+                FROM players p
+                JOIN player_stats ps ON p.id = ps.player_id
+                WHERE ps.leaderboard_id = :l_id AND ps.season_id = :season_id
+                ORDER BY ps.rating DESC, ps.wins DESC, ps.goal_diff DESC
+                LIMIT 3
+            """), {"l_id": leaderboard_id, "season_id": closed_season_id}).fetchall()
+
+            badges = {}
+            icons = ["🥇", "🥈", "🥉"]
+            for index, row in enumerate(rows):
+                name = _row_dict(row, ("name",))["name"]
+                badges[name] = icons[index]
+            return badges
 
     def _season_condition_sql(self, season_id):
         if season_id is not None:

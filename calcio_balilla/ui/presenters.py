@@ -32,10 +32,11 @@ def format_future_match_row(record):
     }
 
 
-def format_leaderboard_row(index, player):
+def format_leaderboard_row(index, player, badge=""):
+    display_name = f"{player.name} {badge}".strip() if badge else player.name
     return {
         "Rank": index + 1,
-        "Player": player.name,
+        "Player": display_name,
         "Rating": round(player.rating, 1),
         "Matches": player.games,
         "W": player.wins,
@@ -44,3 +45,4 @@ def format_leaderboard_row(index, player):
         "Win %": (player.wins / player.games * 100) if player.games > 0 else 0.0,
         "Trend": player.trend if player.trend else "-",
     }
+

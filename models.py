@@ -79,6 +79,11 @@ class DatabaseManager:
 
     @staticmethod
     @st.cache_data
+    def get_player_badges(leaderboard_id: int):
+        return _facade().get_player_badges(leaderboard_id)
+
+    @staticmethod
+    @st.cache_data
     def get_all_players(leaderboard_id: int):
         return _facade().get_all_players(leaderboard_id)
 
