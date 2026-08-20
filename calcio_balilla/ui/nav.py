@@ -1,4 +1,5 @@
 import streamlit as st
+from calcio_balilla.ui.auth_persistence import clear_persisted_login
 from calcio_balilla.ui.state import (
     PAGE_DELETE_MATCH,
     PAGE_HOME,
@@ -8,6 +9,7 @@ from calcio_balilla.ui.state import (
     PAGE_SEASONS,
     can_manage,
     get_current_page,
+    get_auth_token,
     get_selected_leaderboard_name,
     get_user,
     is_authenticated,
@@ -112,6 +114,7 @@ def render_sidebar(selected_l_id):
             st.write("Logged in: **Guest**")
             
         if st.button("Logout", use_container_width=True):
+            clear_persisted_login(get_auth_token())
             logout_user()
             st.rerun()
 

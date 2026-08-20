@@ -145,6 +145,36 @@ def init_db():
         );
         """))
 
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS auth_sessions (
+            id SERIAL PRIMARY KEY,
+            token_hash TEXT UNIQUE NOT NULL,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            is_guest BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            expires_at TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
+            CHECK ((is_guest = TRUE AND user_id IS NULL)
+                OR (is_guest = FALSE AND user_id IS NOT NULL))
+        );
+        """))
+        conn.execute(text("""
+        ALTER TABLE auth_sessions
+        ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP;
+        """))
+        conn.execute(text("""
+        UPDATE auth_sessions
+        SET expires_at = created_at + INTERVAL '7 days'
+        WHERE expires_at IS NULL;
+        """))
+        conn.execute(text("""
+        ALTER TABLE auth_sessions
+        ALTER COLUMN expires_at SET DEFAULT (NOW() + INTERVAL '7 days');
+        """))
+        conn.execute(text("""
+        ALTER TABLE auth_sessions
+        ALTER COLUMN expires_at SET NOT NULL;
+        """))
+
         # 4. Default Seed Data (Idempotent)
         # Default Leaderboards
         res = conn.execute(text("SELECT count(*) FROM leaderboards")).fetchone()

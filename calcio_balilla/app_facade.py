@@ -88,6 +88,15 @@ class ApplicationFacade:
         hashed_password = self.hash_password(password)
         return self.user_repo().check_login(username, hashed_password)
 
+    def create_session(self, user_id=None) -> str:
+        return self.user_repo().create_session(user_id)
+
+    def get_session_identity(self, token: str):
+        return self.user_repo().get_session_identity(token)
+
+    def delete_session(self, token: str):
+        self.user_repo().delete_session(token)
+
     def get_player_names(self, leaderboard_id: int):
         return self.player_repo().get_player_names(leaderboard_id)
 

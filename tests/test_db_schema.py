@@ -47,6 +47,9 @@ class TestDatabaseSchema(unittest.TestCase):
         self.assertIn("alter table matches add column if not exists season_id", executed_sql)
         self.assertIn("alter table player_stats add column if not exists season_id", executed_sql)
         self.assertIn("alter table player_ratings_history add column if not exists season_id", executed_sql)
+        self.assertIn("create table if not exists auth_sessions", executed_sql)
+        self.assertIn("expires_at timestamp not null", executed_sql)
+        self.assertIn("alter table auth_sessions", executed_sql)
 
 
 if __name__ == "__main__":

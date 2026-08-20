@@ -14,6 +14,7 @@ SESSION_SELECTED_LEADERBOARD = "selected_leaderboard"
 SESSION_NOTES_DISMISSED = "notes_dismissed"
 SESSION_NOTES_SHOWN = "notes_shown"
 SESSION_FIRST_CHECK_DONE = "first_check_done"
+SESSION_AUTH_TOKEN = "auth_token"
 
 GUEST_USER = "guest"
 
@@ -23,6 +24,7 @@ def init_session_state():
         SESSION_USER: None,
         SESSION_CURRENT_PAGE: PAGE_HOME,
         SESSION_NOTES_DISMISSED: False,
+        SESSION_AUTH_TOKEN: None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -49,8 +51,17 @@ def set_guest_user():
     set_user(GUEST_USER)
 
 
+def get_auth_token():
+    return st.session_state.get(SESSION_AUTH_TOKEN)
+
+
+def set_auth_token(token):
+    st.session_state[SESSION_AUTH_TOKEN] = token
+
+
 def logout_user():
     set_user(None)
+    set_auth_token(None)
 
 
 def get_current_page() -> str:

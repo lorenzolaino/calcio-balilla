@@ -10,6 +10,7 @@ from calcio_balilla.ui.state import (
     is_authenticated,
 )
 from calcio_balilla.ui.auth import show_login_page
+from calcio_balilla.ui.auth_persistence import restore_persisted_login
 from calcio_balilla.ui.nav import render_sidebar, render_main_content
 from calcio_balilla.ui.services import get_app
 
@@ -21,6 +22,11 @@ def run_web_app():
 
     # --- Session State Init ---
     init_session_state()
+
+    # Browser storage is loaded asynchronously on a fresh Streamlit session.
+    # Wait for it before deciding whether the login page is required.
+    if not is_authenticated() and not restore_persisted_login():
+        return
 
     # --- Responsive Detection ---
     is_mobile = resolve_is_mobile()

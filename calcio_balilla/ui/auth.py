@@ -1,5 +1,6 @@
 import streamlit as st
 from calcio_balilla.ui.services import get_app
+from calcio_balilla.ui.auth_persistence import persist_login
 from calcio_balilla.ui.state import set_guest_user, set_user
 
 def show_login_page():
@@ -18,6 +19,7 @@ def show_login_page():
                 if st.button("Login", use_container_width=True, type="primary"):
                     user = get_app().check_login(username, password)
                     if user:
+                        persist_login(user.id)
                         set_user({
                             "id": user.id,
                             "username": user.username,
@@ -29,5 +31,6 @@ def show_login_page():
                         st.error("Login failed")
             with col2:
                 if st.button("Continue as Guest", use_container_width=True):
+                    persist_login()
                     set_guest_user()
                     st.rerun()
