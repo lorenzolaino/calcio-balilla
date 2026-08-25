@@ -50,7 +50,8 @@ def run_web_app():
     selected_l_id = leaderboard_options[selected_l_name]
 
     # --- Navigation Sidebar ---
-    render_sidebar(selected_l_id)
+    if render_sidebar(selected_l_id):
+        return
 
     # --- Main Content Rendering ---
     render_main_content(is_mobile, selected_l_id, selected_l_name, leaderboard_options)

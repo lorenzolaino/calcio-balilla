@@ -54,7 +54,8 @@ def clear_persisted_login(token):
 def _set_browser_token(token: str):
     streamlit_js_eval(
         js_expressions=(
-            f"localStorage.setItem('{AUTH_STORAGE_KEY}', {json.dumps(token)})"
+            f"localStorage.setItem('{AUTH_STORAGE_KEY}', {json.dumps(token)}); "
+            f"localStorage.getItem('{AUTH_STORAGE_KEY}')"
         ),
         key="set_auth_token",
     )
@@ -62,6 +63,8 @@ def _set_browser_token(token: str):
 
 def _remove_browser_token():
     streamlit_js_eval(
-        js_expressions=f"localStorage.removeItem('{AUTH_STORAGE_KEY}')",
+        js_expressions=(
+            f"localStorage.removeItem('{AUTH_STORAGE_KEY}'); 'auth_token_removed'"
+        ),
         key="remove_auth_token",
     )

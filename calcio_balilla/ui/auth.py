@@ -26,11 +26,11 @@ def show_login_page():
                             "role": user.role,
                             "leaderboard_id": user.leaderboard_id
                         })
-                        st.rerun()
+                        return
                     else:
                         st.error("Login failed")
             with col2:
                 if st.button("Continue as Guest", use_container_width=True):
                     persist_login()
                     set_guest_user()
-                    st.rerun()
+                    return

@@ -116,7 +116,8 @@ def render_sidebar(selected_l_id):
         if st.button("Logout", use_container_width=True):
             clear_persisted_login(get_auth_token())
             logout_user()
-            st.rerun()
+            return True
+    return False
 
 def render_main_content(is_mobile, selected_l_id, selected_l_name, leaderboard_options):
     # --- Main Content Header ---
