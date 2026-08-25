@@ -21,27 +21,23 @@ class PlayerRepository:
 
     def get_player_badges(self, leaderboard_id: int) -> dict[str, str]:
         with self._get_connection() as conn:
-            closed_season = conn.execute(text("""
-                SELECT id
-                FROM seasons
-                WHERE leaderboard_id = :l_id AND is_active = FALSE AND closed_at IS NOT NULL
-                ORDER BY number DESC
-                LIMIT 1
-            """), {"l_id": leaderboard_id}).fetchone()
-
-            if not closed_season:
-                return {}
-
-            closed_season_id = _row_dict(closed_season, ("id",))["id"]
-
             rows = conn.execute(text("""
                 SELECT p.name
                 FROM players p
                 JOIN player_stats ps ON p.id = ps.player_id
-                WHERE ps.leaderboard_id = :l_id AND ps.season_id = :season_id
+                WHERE ps.leaderboard_id = :l_id
+                  AND ps.season_id = (
+                      SELECT id
+                      FROM seasons
+                      WHERE leaderboard_id = :l_id
+                        AND is_active = FALSE
+                        AND closed_at IS NOT NULL
+                      ORDER BY number DESC
+                      LIMIT 1
+                  )
                 ORDER BY ps.rating DESC, ps.wins DESC, ps.goal_diff DESC
                 LIMIT 3
-            """), {"l_id": leaderboard_id, "season_id": closed_season_id}).fetchall()
+            """), {"l_id": leaderboard_id}).fetchall()
 
             badges = {}
             icons = ["🥇", "🥈", "🥉"]

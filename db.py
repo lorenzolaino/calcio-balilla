@@ -79,6 +79,10 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_matches_leaderboard_date
         ON matches (leaderboard_id, date DESC);
         """))
+        conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_matches_leaderboard_season_date
+        ON matches (leaderboard_id, season_id, date DESC);
+        """))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS future_matches (
@@ -107,6 +111,10 @@ def init_db():
         """))
         conn.execute(text("ALTER TABLE player_ratings_history ADD COLUMN IF NOT EXISTS leaderboard_id INTEGER REFERENCES leaderboards(id);"))
         conn.execute(text("ALTER TABLE player_ratings_history ADD COLUMN IF NOT EXISTS season_id INTEGER;"))
+        conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_ratings_history_leaderboard_season_created
+        ON player_ratings_history (leaderboard_id, season_id, created_at);
+        """))
 
         conn.execute(text("""
         CREATE TABLE IF NOT EXISTS seasons (
@@ -250,6 +258,10 @@ def init_db():
         conn.execute(text("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_player_stats_player_leaderboard_season
         ON player_stats (player_id, leaderboard_id, season_id);
+        """))
+        conn.execute(text("""
+        CREATE INDEX IF NOT EXISTS idx_player_stats_leaderboard_season_player
+        ON player_stats (leaderboard_id, season_id, player_id);
         """))
         conn.execute(text("ALTER TABLE player_stats ALTER COLUMN season_id SET NOT NULL;"))
         conn.execute(text("ALTER TABLE matches ALTER COLUMN season_id SET NOT NULL;"))

@@ -83,13 +83,14 @@ class TestPlayerManagement(unittest.TestCase):
         mock_conn = MagicMock()
         mock_get_conn.return_value.__enter__.return_value = mock_conn
         
-        # Mock closed season query returning a season row
-        mock_conn.execute.return_value.fetchone.return_value = (1,)
-        # Mock top 3 players query returning 3 players
         mock_conn.execute.return_value.fetchall.return_value = [("Mario",), ("Luigi",), ("Peppe",)]
         
         badges = DatabaseManager.get_player_badges(1)
         self.assertEqual(badges, {"Mario": "🥇", "Luigi": "🥈", "Peppe": "🥉"})
+        self.assertEqual(mock_conn.execute.call_count, 1)
+        sql = str(mock_conn.execute.call_args.args[0]).lower()
+        self.assertIn("from seasons", sql)
+        self.assertIn("closed_at is not null", sql)
 
     def test_format_leaderboard_row_with_badge(self):
         from calcio_balilla.ui.presenters import format_leaderboard_row
