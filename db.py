@@ -75,6 +75,7 @@ def init_db():
         """))
         conn.execute(text("ALTER TABLE matches ADD COLUMN IF NOT EXISTS leaderboard_id INTEGER REFERENCES leaderboards(id);"))
         conn.execute(text("ALTER TABLE matches ADD COLUMN IF NOT EXISTS season_id INTEGER;"))
+
         conn.execute(text("""
         CREATE INDEX IF NOT EXISTS idx_matches_leaderboard_date
         ON matches (leaderboard_id, date DESC);
@@ -133,6 +134,37 @@ def init_db():
         ON seasons (leaderboard_id)
         WHERE is_active = TRUE;
         """))
+
+        # Tournament graph and the optional link from an ordinary match to a series.
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS tournaments (
+            id SERIAL PRIMARY KEY, leaderboard_id INTEGER NOT NULL REFERENCES leaderboards(id) ON DELETE CASCADE,
+            season_id INTEGER NOT NULL REFERENCES seasons(id) ON DELETE RESTRICT, name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+            winner_id INTEGER REFERENCES players(id), created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            UNIQUE (leaderboard_id, season_id, name)
+        );
+        """))
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS tournament_participants (
+            tournament_id INTEGER REFERENCES tournaments(id) ON DELETE CASCADE,
+            player_id INTEGER REFERENCES players(id) ON DELETE RESTRICT,
+            PRIMARY KEY (tournament_id, player_id)
+        );
+        """))
+        conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS tournament_series (
+            id SERIAL PRIMARY KEY, tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+            round_index INTEGER NOT NULL, round_name TEXT NOT NULL, position INTEGER NOT NULL,
+            challenger1_id INTEGER REFERENCES players(id), challenger2_id INTEGER REFERENCES players(id),
+            is_final BOOLEAN NOT NULL DEFAULT FALSE,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','active','completed')),
+            winner_id INTEGER REFERENCES players(id), next_series_id INTEGER REFERENCES tournament_series(id),
+            next_slot INTEGER CHECK (next_slot IN (1,2)), UNIQUE (tournament_id, round_index, position)
+        );
+        """))
+        conn.execute(text("ALTER TABLE matches ADD COLUMN IF NOT EXISTS tournament_series_id INTEGER REFERENCES tournament_series(id);"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_matches_tournament_series ON matches (tournament_series_id);"))
 
         # 3. Roles & Users
         conn.execute(text("""

@@ -7,6 +7,8 @@ from calcio_balilla.ui.state import (
     PAGE_NEW_MATCH,
     PAGE_SEASON_ADMIN,
     PAGE_SEASONS,
+    PAGE_TOURNAMENT,
+    PAGE_MANAGE_TOURNAMENT,
     can_manage,
     get_current_page,
     get_auth_token,
@@ -25,6 +27,7 @@ from calcio_balilla.ui.match_management import show_new_match, show_delete_match
 from calcio_balilla.ui.admin import show_manage_players
 from calcio_balilla.ui.season_admin import show_season_admin
 from calcio_balilla.ui.seasons import show_seasons_archive
+from calcio_balilla.ui.tournaments import show_manage_tournaments, show_tournament
 
 
 def _set_current_page(page_name: str):
@@ -81,6 +84,12 @@ def _render_management_page(current_page, selected_l_id, selected_l_name):
     if current_page == PAGE_SEASON_ADMIN:
         show_season_admin(selected_l_id, selected_l_name)
         return True
+    if current_page == PAGE_TOURNAMENT:
+        show_tournament(selected_l_id)
+        return True
+    if current_page == PAGE_MANAGE_TOURNAMENT:
+        show_manage_tournaments(selected_l_id, selected_l_name)
+        return True
     return False
 
 
@@ -92,6 +101,8 @@ def render_sidebar(selected_l_id):
 
         if st.button("📚 Seasons", use_container_width=True):
             _set_current_page(PAGE_SEASONS)
+        if st.button("🏆 Tournament", use_container_width=True):
+            _set_current_page(PAGE_TOURNAMENT)
             
         if can_manage(selected_l_id):
             st.divider()
@@ -103,6 +114,8 @@ def render_sidebar(selected_l_id):
             if st.button("🗑️ Delete Match", use_container_width=True):
                 _set_current_page(PAGE_DELETE_MATCH)
             if is_authenticated() and not is_guest_user():
+                if st.button("🏆 Manage tournament", use_container_width=True):
+                    _set_current_page(PAGE_MANAGE_TOURNAMENT)
                 if st.button("🛠️ Manage Season", use_container_width=True):
                     _set_current_page(PAGE_SEASON_ADMIN)
 

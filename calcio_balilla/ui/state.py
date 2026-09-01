@@ -7,6 +7,8 @@ PAGE_MANAGE_PLAYERS = "Manage Players"
 PAGE_DELETE_MATCH = "Delete Match"
 PAGE_SEASONS = "Seasons"
 PAGE_SEASON_ADMIN = "Manage Season"
+PAGE_TOURNAMENT = "Tournament"
+PAGE_MANAGE_TOURNAMENT = "Manage Tournament"
 
 SESSION_USER = "user"
 SESSION_CURRENT_PAGE = "current_page"

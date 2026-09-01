@@ -2,18 +2,21 @@ from db import engine as default_engine
 from calcio_balilla.data.player_repository import PlayerRepository
 from calcio_balilla.data.match_repository import MatchRepository
 from calcio_balilla.data.season_repository import SeasonRepository
+from calcio_balilla.data.tournament_repository import TournamentRepository
+from calcio_balilla.core.tournament import series_result, validate_series_match
 from calcio_balilla.core.domain import MatchPlayerState
 import scoring
 
 class MatchService:
-    def __init__(self, engine=None, player_repo=None, match_repo=None, season_repo=None, get_connection=None):
+    def __init__(self, engine=None, player_repo=None, match_repo=None, season_repo=None, tournament_repo=None, get_connection=None):
         self.engine = engine or default_engine
         self._get_connection = get_connection
         self.player_repo = player_repo or PlayerRepository(self.engine, self._get_connection)
         self.match_repo = match_repo or MatchRepository(self.engine, self._get_connection)
         self.season_repo = season_repo or SeasonRepository(self.engine, self._get_connection)
+        self.tournament_repo = tournament_repo or TournamentRepository(self.engine, self._get_connection)
 
-    def record_match(self, a1_name, a2_name, b1_name, b2_name, goals_a, goals_b, leaderboard_id):
+    def record_match(self, a1_name, a2_name, b1_name, b2_name, goals_a, goals_b, leaderboard_id, tournament_series_id=None):
         if goals_a == goals_b:
             raise ValueError("Draws are not allowed.")
         margin = abs(goals_a - goals_b)
@@ -40,6 +43,19 @@ class MatchService:
 
             a1, a2, b1, b2 = [existing[name] for name in names]
 
+            series = None
+            if tournament_series_id is not None:
+                series = self.tournament_repo.lock_series(conn, tournament_series_id)
+                if not series or series.status != "active":
+                    raise ValueError("The selected tournament series is not active.")
+                if series.leaderboard_id != leaderboard_id or series.season_id != season_id:
+                    raise ValueError("The series does not belong to the current leaderboard and season.")
+                used1, used2 = self.tournament_repo.used_companions(
+                    conn, series.id, series.challenger1_id, series.challenger2_id
+                )
+                validate_series_match(series.challenger1_id, series.challenger2_id,
+                                      (a1.id, a2.id), (b1.id, b2.id), used1, used2)
+
             # 5. Check duplicate match
             duplicate_match_id = self.match_repo.get_recent_duplicate_match_id(
                 conn, a1.id, a2.id, b1.id, b2.id, goals_a, goals_b, leaderboard_id, season_id
@@ -64,7 +80,7 @@ class MatchService:
 
             # 8. Insert Match record
             match_id = self.match_repo.insert_match_record(
-                conn, a1.id, a2.id, b1.id, b2.id, goals_a, goals_b, delta_a1, delta_a2, delta_b1, delta_b2, leaderboard_id, season_id
+                conn, a1.id, a2.id, b1.id, b2.id, goals_a, goals_b, delta_a1, delta_a2, delta_b1, delta_b2, leaderboard_id, season_id, tournament_series_id
             )
 
             # 9. Batch Save Rating History in DB
@@ -73,6 +89,16 @@ class MatchService:
                 for player in [a1, a2, b1, b2]
             ]
             self.match_repo.insert_player_ratings_history_batch(conn, history_updates)
+
+            if series is not None:
+                winner_ids = self.tournament_repo.match_winners(
+                    conn, series.id, series.challenger1_id, series.challenger2_id
+                )
+                _, _, series_winner = series_result(
+                    winner_ids, series.challenger1_id, series.challenger2_id, series.is_final
+                )
+                if series_winner is not None:
+                    self.tournament_repo.complete_and_advance(conn, series, series_winner)
             
         return match_id
 

@@ -136,11 +136,11 @@ class MatchRepository:
     def delete_match_record(self, conn, match_id: int):
         conn.execute(text("DELETE FROM matches WHERE id = :mid"), {"mid": match_id})
 
-    def insert_match_record(self, conn, a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, delta_a1, delta_a2, delta_b1, delta_b2, leaderboard_id: int, season_id: int):
+    def insert_match_record(self, conn, a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, delta_a1, delta_a2, delta_b1, delta_b2, leaderboard_id: int, season_id: int, tournament_series_id=None):
         match_insert = text("""
             INSERT INTO matches
-            (date, a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, delta_a1, delta_a2, delta_b1, delta_b2, leaderboard_id, season_id)
-            VALUES (:d, :a1, :a2, :b1, :b2, :ga, :gb, :da1, :da2, :db1, :db2, :l_id, :s_id)
+            (date, a1_id, a2_id, b1_id, b2_id, goals_a, goals_b, delta_a1, delta_a2, delta_b1, delta_b2, leaderboard_id, season_id, tournament_series_id)
+            VALUES (:d, :a1, :a2, :b1, :b2, :ga, :gb, :da1, :da2, :db1, :db2, :l_id, :s_id, :series_id)
             RETURNING id
         """)
         return conn.execute(match_insert, {
@@ -152,6 +152,7 @@ class MatchRepository:
             "db1": delta_b1, "db2": delta_b2,
             "l_id": leaderboard_id,
             "s_id": season_id,
+            "series_id": tournament_series_id,
         }).scalar()
 
     def insert_player_ratings_history_batch(self, conn, updates: list):

@@ -139,5 +139,5 @@ class DatabaseManager:
         return _facade().delete_match(match_id)
 
     @staticmethod
-    def record_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_b, leaderboard_id):
-        return _facade().record_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_b, leaderboard_id)
+    def record_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_b, leaderboard_id, tournament_series_id=None):
+        return _facade().record_match(a1_name, a2_name, b1_name, b2_name, goals_a, goals_b, leaderboard_id, tournament_series_id)

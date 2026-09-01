@@ -18,6 +18,24 @@ def show_new_match(l_id):
     form_version = st.session_state.get(form_version_key, 0)
     form_key_prefix = f"admin_match_{l_id}_{form_version}"
 
+    season = get_app().get_active_season(l_id)
+    tournaments = get_app().get_tournaments(l_id, season.id if season else None)
+    tournament_options = {"No tournament": None}
+    tournament_options.update({t.name: t for t in tournaments if t.status == "active"})
+    tournament_label = st.selectbox("Tournament match", list(tournament_options), key=f"{form_key_prefix}_tournament")
+    selected_tournament = tournament_options[tournament_label]
+    series_id = None
+    if selected_tournament:
+        active_series = get_app().get_tournament_series(selected_tournament.id, active_only=True)
+        series_options = {
+            f"{s.round_name}: {s.challenger1_name} vs {s.challenger2_name} ({s.wins1}-{s.wins2})": s.id
+            for s in active_series
+        }
+        if not series_options:
+            st.warning("This tournament has no active series.")
+        else:
+            series_id = series_options[st.selectbox("Series", list(series_options), key=f"{form_key_prefix}_series")]
+
     with st.form(key=f"{form_key_prefix}_form"):
         col1, col2 = st.columns(2)
         with col1:
@@ -44,7 +62,9 @@ def show_new_match(l_id):
         else:
             try:
                 st.session_state[saving_key] = True
-                get_app().record_match(a1, a2, b1, b2, score_a, score_b, l_id)
+                if selected_tournament and series_id is None:
+                    raise ValueError("Select an active tournament series.")
+                get_app().record_match(a1, a2, b1, b2, score_a, score_b, l_id, series_id)
                 st.success("Match saved!")
 
                 st.session_state[form_version_key] = form_version + 1

@@ -6,11 +6,13 @@ from calcio_balilla.cache import StreamlitCacheManager
 from calcio_balilla.core.calendar_service import CalendarService
 from calcio_balilla.core.match_service import MatchService
 from calcio_balilla.core.season_service import SeasonService
+from calcio_balilla.core.tournament_service import TournamentService
 from calcio_balilla.data.leaderboard_repository import LeaderboardRepository
 from calcio_balilla.data.match_repository import MatchRepository
 from calcio_balilla.data.player_repository import PlayerRepository
 from calcio_balilla.data.season_repository import SeasonRepository
 from calcio_balilla.data.user_repository import UserRepository
+from calcio_balilla.data.tournament_repository import TournamentRepository
 
 
 class ApplicationFacade:
@@ -42,6 +44,29 @@ class ApplicationFacade:
 
     def season_service(self):
         return SeasonService(engine=self.engine, get_connection=self.get_connection)
+
+    def tournament_repo(self):
+        return TournamentRepository(engine=self.engine, get_connection=self.get_connection)
+
+    def tournament_service(self):
+        return TournamentService(engine=self.engine, get_connection=self.get_connection)
+
+    def create_tournament(self, leaderboard_id, name, participant_ids):
+        result = self.tournament_service().create_tournament(leaderboard_id, name, participant_ids)
+        self.cache_manager.invalidate_all()
+        return result
+
+    def get_tournaments(self, leaderboard_id, season_id=None):
+        return self.tournament_repo().list_tournaments(leaderboard_id, season_id)
+
+    def get_tournament_series(self, tournament_id, active_only=False):
+        return self.tournament_repo().get_series(tournament_id, active_only)
+
+    def draw_tournament_companions(self, series_id, present_ids):
+        return self.tournament_service().draw_companions(series_id, present_ids)
+
+    def get_used_tournament_companions(self, series_id, challenger1_id, challenger2_id):
+        return self.tournament_repo().get_used_companions(series_id, challenger1_id, challenger2_id)
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -141,7 +166,7 @@ class ApplicationFacade:
             self.cache_manager.invalidate_all()
         return result
 
-    def record_match(self, a1_name, a2_name, b1_name, b2_name, goals_a, goals_b, leaderboard_id):
+    def record_match(self, a1_name, a2_name, b1_name, b2_name, goals_a, goals_b, leaderboard_id, tournament_series_id=None):
         result = self.match_service().record_match(
             a1_name,
             a2_name,
@@ -150,6 +175,7 @@ class ApplicationFacade:
             goals_a,
             goals_b,
             leaderboard_id,
+            tournament_series_id,
         )
         self.cache_manager.invalidate_all()
         return result

@@ -50,6 +50,11 @@ class TestDatabaseSchema(unittest.TestCase):
         self.assertIn("create table if not exists auth_sessions", executed_sql)
         self.assertIn("expires_at timestamp not null", executed_sql)
         self.assertIn("alter table auth_sessions", executed_sql)
+        self.assertIn("create table if not exists tournaments", executed_sql)
+        self.assertIn("create table if not exists tournament_participants", executed_sql)
+        self.assertIn("create table if not exists tournament_series", executed_sql)
+        self.assertIn("alter table matches add column if not exists tournament_series_id", executed_sql)
+        self.assertIn("create index if not exists idx_matches_tournament_series", executed_sql)
 
 
 if __name__ == "__main__":
