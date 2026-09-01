@@ -135,6 +135,20 @@ class ApplicationFacade:
             leaderboard_id,
         )
 
+    def get_match_suggestions_for_player(
+        self,
+        target_player_id: int,
+        available_player_ids: list,
+        leaderboard_id: int,
+        reference_date=None,
+    ):
+        return self.calendar_service().get_match_suggestions_for_player(
+            target_player_id,
+            available_player_ids,
+            leaderboard_id,
+            reference_date=reference_date,
+        )
+
     def delete_match(self, match_id):
         result = self.match_service().delete_match(match_id)
         if result:

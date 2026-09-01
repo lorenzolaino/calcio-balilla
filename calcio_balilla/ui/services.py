@@ -48,12 +48,26 @@ class CachedApplicationFacade(ApplicationFacade):
     def get_future_matches(_self, leaderboard_id: int):
         return super().get_future_matches(leaderboard_id)
 
-    @st.cache_data
     def get_best_match_for_player(_self, target_player_id: int, available_player_ids: list, leaderboard_id: int):
         return super().get_best_match_for_player(
             target_player_id,
             list(available_player_ids),
             leaderboard_id,
+        )
+
+    @st.cache_data
+    def get_match_suggestions_for_player(
+        _self,
+        target_player_id: int,
+        available_player_ids: list,
+        leaderboard_id: int,
+        reference_date,
+    ):
+        return super().get_match_suggestions_for_player(
+            target_player_id,
+            list(available_player_ids),
+            leaderboard_id,
+            reference_date=reference_date,
         )
 
 

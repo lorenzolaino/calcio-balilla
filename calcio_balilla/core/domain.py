@@ -111,6 +111,28 @@ class MatchRecord:
     season_id: int
 
 
+@dataclass(frozen=True)
+class MatchmakingHistoryEntry:
+    date: datetime
+    a1_id: int
+    a2_id: int
+    b1_id: int
+    b2_id: int
+
+
+@dataclass(frozen=True)
+class MatchSuggestion:
+    team_a: tuple[str, str]
+    team_b: tuple[str, str]
+    win_probability: float
+    balance_band: str
+    exact_match_penalty: int
+    partner_penalty: int
+    opponent_penalty: int
+    team_a_ids: tuple[int, int]
+    team_b_ids: tuple[int, int]
+
+
 @dataclass
 class MatchPlayerState:
     id: int

@@ -10,11 +10,7 @@ def show_release_notes(current_version: str):
     This major update introduces advanced planning tools and a completely redesigned responsive interface.
     
     **New Features & Improvements**:
-    1.  **Matchmaking on UT**: The matchmaking tool is now available on both `Leaderboard DG` and `Leaderboard UT`.
-    2.  **Season System**: Each leaderboard now manages its own seasons independently, with current season data separated from historical seasons.
-    3.  **Season Rotation**: Added `Manage Season` to close the current season and open the next one with confirmation before proceeding.
-    4.  **Refined Navigation**: New sidebar-based management pages and a unified entry page with "Guest" access.
-    5.  **Performance**: Optimized database interactions for faster page loads.
+    1.  **Matchmaking**: Suggests balanced 2vs2 matches while rotating teammates and opponents.
     """)
     if st.button("Got it!"):
         set_notes_dismissed(True)

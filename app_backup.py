@@ -15,7 +15,7 @@ def show_release_notes():
     This update introduces advanced tools for match planning and competitive strategy.
     
     **New Features**:
-    1.  **Matchmaking (Leaderboard DG Exclusive)**: A new tool to generate the "Optimal Match." It uses a strategic heuristic to find matches you are likely to win while maximizing Elo gains against your immediate rivals.
+    1.  **Matchmaking**: Suggests balanced 2vs2 matches while rotating teammates and opponents.
     2.  **Calendar (Leaderboard UT Exclusive)**: A scheduling tool that generates a random match calendar, ensuring a variety of pairings and providing a clear view of upcoming games.
     3.  **Refined Navigation**: The sidebar now intelligently shows/hides management tools based on your specific permissions for the selected leaderboard.
     
@@ -193,8 +193,8 @@ def run_web_app():
     elif action == "Matchmaking":
         st.subheader("🎯 Optimal Matchmaking")
         players_data = DatabaseManager.get_player_names(selected_l_id)
-        players_list = [p[1] for p in players_data]
-        player_map = {p[1]: p[0] for p in players_data}
+        players_list = [p.name for p in players_data]
+        player_map = {p.name: p.id for p in players_data}
 
         if len(players_list) < 4:
             st.warning("At least 4 players are required for matchmaking.")
@@ -215,8 +215,11 @@ def run_web_app():
                     target_id = player_map[who_am_i]
                     available_ids = [player_map[name] for name in available]
                     
-                    with st.spinner("Finding best match..."):
-                        best = DatabaseManager.get_best_match_for_player(target_id, available_ids, selected_l_id)
+                    with st.spinner("Finding matches..."):
+                        suggestions = DatabaseManager.get_match_suggestions_for_player(
+                            target_id, available_ids, selected_l_id
+                        )
+                        best = suggestions[0] if suggestions else None
                     
                     if best:
                         st.success("Best match found!")
@@ -224,19 +227,18 @@ def run_web_app():
                         st.markdown(f"""
                         <div style="text-align: center; border: 2px solid #4CAF50; border-radius: 10px; padding: 20px; background-color: rgba(76, 175, 80, 0.1);">
                             <h3 style="margin: 0;">Team A</h3>
-                            <h2 style="margin: 10px 0; color: #4CAF50;">{best['team_a'][0]} & {best['team_a'][1]}</h2>
+                            <h2 style="margin: 10px 0; color: #4CAF50;">{best.team_a[0]} & {best.team_a[1]}</h2>
                             <h4 style="margin: 10px 0;">VS</h4>
                             <h3 style="margin: 0;">Team B</h3>
-                            <h2 style="margin: 10px 0; color: #FF5252;">{best['team_b'][0]} & {best['team_b'][1]}</h2>
+                            <h2 style="margin: 10px 0; color: #FF5252;">{best.team_b[0]} & {best.team_b[1]}</h2>
                         </div>
                         """, unsafe_allow_html=True)
                         
                         st.write("")
-                        col_stat1, col_stat2 = st.columns(2)
-                        with col_stat1:
-                            st.metric("Win Probability", f"{best['win_prob']:.1%}")
-                        with col_stat2:
-                            st.metric("Est. Elo Gain", f"+{best['est_delta']:.1f}")
+                        st.metric(
+                            "Elo balance",
+                            f"{best.win_probability:.0%} / {1 - best.win_probability:.0%}",
+                        )
                     else:
                         st.error("Could not generate a match.")
 

@@ -135,6 +135,20 @@ class DatabaseManager:
         return _facade().get_best_match_for_player(target_player_id, available_player_ids, leaderboard_id)
 
     @staticmethod
+    def get_match_suggestions_for_player(
+        target_player_id: int,
+        available_player_ids: list,
+        leaderboard_id: int,
+        reference_date=None,
+    ):
+        return _facade().get_match_suggestions_for_player(
+            target_player_id,
+            available_player_ids,
+            leaderboard_id,
+            reference_date=reference_date,
+        )
+
+    @staticmethod
     def delete_match(match_id):
         return _facade().delete_match(match_id)
 

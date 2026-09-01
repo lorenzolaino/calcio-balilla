@@ -1,8 +1,8 @@
 from datetime import datetime
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from db import engine as default_engine
 import scoring
-from calcio_balilla.core.domain import FutureMatchEntry, MatchHistoryEntry, MatchRecord
+from calcio_balilla.core.domain import FutureMatchEntry, MatchHistoryEntry, MatchmakingHistoryEntry, MatchRecord
 
 
 def _row_dict(row, fields):
@@ -78,6 +78,28 @@ class MatchRepository:
                 "delta_a1", "delta_a2", "delta_b1", "delta_b2", "delta_a", "delta_b", "id",
             )
             return [MatchHistoryEntry(**_row_dict(row, fields)) for row in rows]
+
+    def get_matchmaking_history(self, leaderboard_id: int, season_id: int, relevant_player_ids: tuple[int, ...]):
+        """Load only the current-season match fields needed by matchmaking."""
+        if not relevant_player_ids:
+            return []
+        query = text("""
+            SELECT date, a1_id, a2_id, b1_id, b2_id
+            FROM matches
+            WHERE leaderboard_id = :l_id
+              AND season_id = :season_id
+              AND (a1_id IN :player_ids OR a2_id IN :player_ids
+                   OR b1_id IN :player_ids OR b2_id IN :player_ids)
+            ORDER BY date, id
+        """).bindparams(bindparam("player_ids", expanding=True))
+        with self._get_connection() as conn:
+            rows = conn.execute(query, {
+                "l_id": leaderboard_id,
+                "season_id": season_id,
+                "player_ids": relevant_player_ids,
+            }).fetchall()
+        fields = ("date", "a1_id", "a2_id", "b1_id", "b2_id")
+        return [MatchmakingHistoryEntry(**_row_dict(row, fields)) for row in rows]
 
     def get_future_matches(self, leaderboard_id: int):
         with self._get_connection() as conn:
