@@ -349,6 +349,116 @@ Per rieseguire i test:
 python3 -m unittest discover -s tests
 ```
 
+## Come provare senza modificare le leaderboard esistenti
+
+La soluzione più sicura è usare un database PostgreSQL separato. Tutte le
+operazioni dell'applicazione dipendono dal valore di `DATABASE_URL`: se questo
+punta a un database di test, leaderboard, season, partite ed ELO del database
+reale non vengono modificati.
+
+### Opzione consigliata: copia isolata del database esistente
+
+Questa opzione mantiene utenti, leaderboard, season e configurazione, ma crea
+una copia indipendente sulla quale si possono effettuare liberamente le prove.
+
+Creare il database di test:
+
+```bash
+createdb calcio_balilla_test
+```
+
+Copiare struttura e dati dal database attualmente indicato da `DATABASE_URL`:
+
+```bash
+pg_dump "$DATABASE_URL" | psql "postgresql://utente:password@localhost:5432/calcio_balilla_test"
+```
+
+Impostare quindi il database di test e avviare Streamlit:
+
+```bash
+export DATABASE_URL="postgresql://utente:password@localhost:5432/calcio_balilla_test"
+python3 -m streamlit run app.py
+```
+
+Sostituire utente, password, host e porta con quelli dell'installazione locale.
+Il database di origine non viene modificato da `pg_dump`; tutte le successive
+scritture dell'app avvengono nella copia di test.
+
+### Controllo obbligatorio prima dell'avvio
+
+Prima di avviare Streamlit controllare sempre la destinazione:
+
+```bash
+echo "$DATABASE_URL"
+```
+
+L'output deve terminare con il nome del database di test, per esempio:
+
+```text
+postgresql://utente:password@localhost:5432/calcio_balilla_test
+```
+
+Non procedere con le prove se l'URL indica il database reale.
+
+### Alternativa: database completamente vuoto
+
+Per collaudare anche la creazione iniziale dello schema:
+
+```bash
+createdb calcio_balilla_test
+export DATABASE_URL="postgresql://utente:password@localhost:5432/calcio_balilla_test"
+python3 -m streamlit run app.py
+```
+
+Al primo avvio `init_db()` crea schema, ruoli, season e leaderboard predefinite.
+Un database vuoto non contiene però gli utenti del database originale: per
+accedere alle funzioni amministrative sarà necessario creare un utente admin o
+copiarlo esplicitamente dal database di sviluppo.
+
+### Script locale per ridurre gli errori
+
+È possibile creare localmente un file `run_test.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -e
+
+export DATABASE_URL="postgresql://utente:password@localhost:5432/calcio_balilla_test"
+
+case "$DATABASE_URL" in
+  */calcio_balilla_test) ;;
+  *)
+    echo "DATABASE_URL non punta al database di test" >&2
+    exit 1
+    ;;
+esac
+
+python3 -m streamlit run app.py
+```
+
+Renderlo eseguibile e avviarlo:
+
+```bash
+chmod +x run_test.sh
+./run_test.sh
+```
+
+Lo script contiene credenziali locali e non deve essere committato. Prima di
+crearlo, aggiungere `run_test.sh` al file `.gitignore` locale oppure usare un
+file di configurazione non versionato.
+
+### Rimozione del database di test
+
+Dopo le prove, assicurarsi che Streamlit non sia più in esecuzione e rimuovere
+solo il database di test:
+
+```bash
+dropdb calcio_balilla_test
+```
+
+Verificare attentamente il nome prima di eseguire il comando. Non usare il nome
+del database reale.
+
 ## Checklist per la prova manuale
 
 1. Aprire `Manage tournament` con una season attiva.
