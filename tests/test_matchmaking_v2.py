@@ -83,6 +83,24 @@ class TestHistoryHelpers(unittest.TestCase):
 
 
 class TestMatchmakingService(unittest.TestCase):
+    def test_global_suggestions_consider_every_selected_player_and_are_deterministic(self):
+        players = [player(1, 1600)] + [player(i, 1000) for i in range(2, 6)]
+        service, _, match_repo, _ = make_service(players)
+
+        first = service.get_match_suggestions([5, 3, 2, 4, 1], 3, REFERENCE_DATE)
+        second = service.get_match_suggestions([1, 2, 3, 4, 5], 3, REFERENCE_DATE)
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 3)
+        self.assertNotIn(1, first[0].team_a_ids + first[0].team_b_ids)
+        match_repo.get_matchmaking_history.assert_called_with(3, 7, (1, 2, 3, 4, 5))
+
+    def test_global_suggestions_require_four_selected_players(self):
+        service, _, match_repo, _ = make_service([player(i) for i in range(1, 5)])
+
+        self.assertEqual(service.get_match_suggestions([1, 2, 3], 3, REFERENCE_DATE), [])
+        match_repo.get_matchmaking_history.assert_not_called()
+
     def test_target_added_duplicates_removed_and_less_than_four_returns_empty(self):
         service, _, match_repo, _ = make_service([player(i) for i in range(1, 4)])
         result = service.get_match_suggestions_for_player(1, [2, 2, 3], 3, REFERENCE_DATE)

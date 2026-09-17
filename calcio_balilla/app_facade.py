@@ -149,6 +149,13 @@ class ApplicationFacade:
             reference_date=reference_date,
         )
 
+    def get_match_suggestions(self, available_player_ids: list, leaderboard_id: int, reference_date=None):
+        return self.calendar_service().get_match_suggestions(
+            available_player_ids,
+            leaderboard_id,
+            reference_date=reference_date,
+        )
+
     def delete_match(self, match_id):
         result = self.match_service().delete_match(match_id)
         if result:

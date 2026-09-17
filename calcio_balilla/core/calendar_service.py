@@ -116,18 +116,68 @@ class CalendarService:
         if target_player_id not in player_ids or len(player_ids) < 4:
             return []
 
+        return self._get_match_suggestions(
+            player_ids,
+            leaderboard_id,
+            active_season.id,
+            stats_by_id,
+            reference_date,
+            target_player_id=target_player_id,
+        )
+
+    def get_match_suggestions(
+        self,
+        available_player_ids: list,
+        leaderboard_id: int,
+        reference_date: date | None = None,
+    ) -> list[MatchSuggestion]:
+        """Return the three best matches among all selected players."""
+        reference_date = reference_date or current_matchmaking_date()
+        active_season = self.season_repo.get_active_season(leaderboard_id)
+        if active_season is None:
+            return []
+        all_stats = self.player_repo.get_active_players_ratings_games(leaderboard_id, active_season.id)
+        stats_by_id = {player.id: player for player in all_stats}
+        player_ids = [player_id for player_id in sorted(set(available_player_ids)) if player_id in stats_by_id]
+        if len(player_ids) < 4:
+            return []
+
+        return self._get_match_suggestions(player_ids, leaderboard_id, active_season.id, stats_by_id, reference_date)
+
+    def _get_match_suggestions(
+        self,
+        player_ids,
+        leaderboard_id,
+        season_id,
+        stats_by_id,
+        reference_date,
+        target_player_id=None,
+    ):
         history = self.match_repo.get_matchmaking_history(
-            leaderboard_id, active_season.id, tuple(player_ids)
+            leaderboard_id, season_id, tuple(player_ids)
         )
         partner_history, opponent_history, exact_match_history = preprocess_matchmaking_history(
             history, reference_date
         )
         candidates = []
-        other_players = [player_id for player_id in player_ids if player_id != target_player_id]
-        for combo in itertools.combinations(other_players, 3):
-            for teammate in combo:
-                team_a = (target_player_id, teammate)
-                team_b = tuple(player_id for player_id in combo if player_id != teammate)
+        if target_player_id is not None:
+            player_groups = (
+                (target_player_id, *combo)
+                for combo in itertools.combinations(
+                    [player_id for player_id in player_ids if player_id != target_player_id], 3
+                )
+            )
+        else:
+            player_groups = itertools.combinations(player_ids, 4)
+
+        for group in player_groups:
+            player_a, player_b, player_c, player_d = group
+            team_options = (
+                ((player_a, player_b), (player_c, player_d)),
+                ((player_a, player_c), (player_b, player_d)),
+                ((player_a, player_d), (player_b, player_c)),
+            )
+            for team_a, team_b in team_options:
                 rating_a = sum(stats_by_id[player_id].rating for player_id in team_a) / 2.0
                 rating_b = sum(stats_by_id[player_id].rating for player_id in team_b) / 2.0
                 win_probability = scoring.expected_score(rating_a, rating_b)

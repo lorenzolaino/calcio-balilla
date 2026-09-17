@@ -51,29 +51,23 @@ def show_matchmaking(l_id):
     display_list = list(display_to_player.keys())
     key_prefix = f"mm_{l_id}"
 
-    col1, col2 = st.columns(2)
-    with col1:
-        who_am_i_lbl = st.selectbox("Who are you?", display_list, key=f"{key_prefix}_who")
-    with col2:
-        available_lbls = st.multiselect(
-            "Available players", display_list, default=display_list, key=f"{key_prefix}_avail"
-        )
+    st.write("Select the players who are present.")
+    checkbox_columns = st.columns(3)
+    available_ids = []
+    for index, label in enumerate(display_list):
+        player = display_to_player[label]
+        with checkbox_columns[index % len(checkbox_columns)]:
+            if st.checkbox(label, value=False, key=f"{key_prefix}_player_{player.id}"):
+                available_ids.append(player.id)
 
     if st.button("Find Matches", key=f"{key_prefix}_find"):
-        selected_labels = list(available_lbls)
-        if who_am_i_lbl not in selected_labels:
-            selected_labels.append(who_am_i_lbl)
-        if len(set(selected_labels)) < 4:
-            st.error("Select at least 3 others.")
+        if len(available_ids) < 4:
+            st.error("Select at least 4 players.")
             return
 
-        target_id = display_to_player[who_am_i_lbl].id
-        available_ids = [display_to_player[label].id for label in selected_labels]
         reference_date = current_matchmaking_date()
         with st.spinner("Calculating..."):
-            suggestions = get_app().get_match_suggestions_for_player(
-                target_id, available_ids, l_id, reference_date
-            )
+            suggestions = get_app().get_match_suggestions(available_ids, l_id, reference_date)
         if suggestions:
             st.success("Matches found!")
             titles = ("Recommended", "Alternative 1", "Alternative 2")

@@ -70,6 +70,19 @@ class CachedApplicationFacade(ApplicationFacade):
             reference_date=reference_date,
         )
 
+    @st.cache_data
+    def get_match_suggestions(
+        _self,
+        available_player_ids: list,
+        leaderboard_id: int,
+        reference_date,
+    ):
+        return super().get_match_suggestions(
+            list(available_player_ids),
+            leaderboard_id,
+            reference_date=reference_date,
+        )
+
 
 def get_app() -> CachedApplicationFacade:
     return CachedApplicationFacade(
