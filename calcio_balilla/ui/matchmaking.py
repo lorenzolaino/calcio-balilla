@@ -69,7 +69,11 @@ def show_matchmaking(l_id):
         with st.spinner("Calculating..."):
             suggestions = get_app().get_match_suggestions(available_ids, l_id, reference_date)
         if suggestions:
-            st.success("Matches found!")
-            titles = ("Recommended", "Alternative 1", "Alternative 2")
+            st.success("Daily matches found!")
+            if len(available_ids) > 12:
+                st.info(
+                    "Three 2v2 matches have 12 places, so not every selected player can play today."
+                )
+            titles = ("Match 1", "Match 2", "Match 3")
             for title, suggestion in zip(titles, suggestions):
                 _render_match_suggestion(suggestion, title)

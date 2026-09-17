@@ -131,7 +131,7 @@ class CalendarService:
         leaderboard_id: int,
         reference_date: date | None = None,
     ) -> list[MatchSuggestion]:
-        """Return the three best matches among all selected players."""
+        """Return a three-match session which gives selected players a turn where possible."""
         reference_date = reference_date or current_matchmaking_date()
         active_season = self.season_repo.get_active_season(leaderboard_id)
         if active_season is None:
@@ -142,7 +142,14 @@ class CalendarService:
         if len(player_ids) < 4:
             return []
 
-        return self._get_match_suggestions(player_ids, leaderboard_id, active_season.id, stats_by_id, reference_date)
+        return self._get_match_suggestions(
+            player_ids,
+            leaderboard_id,
+            active_season.id,
+            stats_by_id,
+            reference_date,
+            prioritize_coverage=True,
+        )
 
     def _get_match_suggestions(
         self,
@@ -152,6 +159,7 @@ class CalendarService:
         stats_by_id,
         reference_date,
         target_player_id=None,
+        prioritize_coverage=False,
     ):
         history = self.match_repo.get_matchmaking_history(
             leaderboard_id, season_id, tuple(player_ids)
@@ -206,7 +214,41 @@ class CalendarService:
                 )
                 candidates.append((ranking_key, suggestion))
         candidates.sort(key=lambda item: item[0])
+        if prioritize_coverage:
+            return self._coverage_first_top_three(candidates)
         return self._diversified_top_three(candidates)
+
+    @staticmethod
+    def _coverage_first_top_three(candidates):
+        """Pick a three-match session, favouring players not yet scheduled.
+
+        Every candidate already represents the best team split for a group under
+        the balance and rotation rules.  At each slot, coverage is the primary
+        criterion; the existing ranking key resolves ties, preserving those
+        rules within the possible daily schedule.
+        """
+        selected = []
+        covered_players = set()
+        remaining = list(candidates)
+
+        for _ in range(3):
+            if not remaining:
+                break
+            ranking_key, suggestion = min(
+                remaining,
+                key=lambda candidate: (
+                    -len(
+                        set(candidate[1].team_a_ids + candidate[1].team_b_ids)
+                        - covered_players
+                    ),
+                    candidate[0],
+                ),
+            )
+            selected.append(suggestion)
+            covered_players.update(suggestion.team_a_ids + suggestion.team_b_ids)
+            remaining.remove((ranking_key, suggestion))
+
+        return selected
 
     @staticmethod
     def _diversified_top_three(candidates):

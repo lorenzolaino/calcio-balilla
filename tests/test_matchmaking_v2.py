@@ -83,7 +83,7 @@ class TestHistoryHelpers(unittest.TestCase):
 
 
 class TestMatchmakingService(unittest.TestCase):
-    def test_global_suggestions_consider_every_selected_player_and_are_deterministic(self):
+    def test_global_suggestions_cover_every_selected_player_and_are_deterministic(self):
         players = [player(1, 1600)] + [player(i, 1000) for i in range(2, 6)]
         service, _, match_repo, _ = make_service(players)
 
@@ -92,8 +92,40 @@ class TestMatchmakingService(unittest.TestCase):
 
         self.assertEqual(first, second)
         self.assertEqual(len(first), 3)
-        self.assertNotIn(1, first[0].team_a_ids + first[0].team_b_ids)
+        scheduled_ids = {
+            player_id
+            for suggestion in first
+            for player_id in suggestion.team_a_ids + suggestion.team_b_ids
+        }
+        self.assertEqual(scheduled_ids, {1, 2, 3, 4, 5})
         match_repo.get_matchmaking_history.assert_called_with(3, 7, (1, 2, 3, 4, 5))
+
+    def test_global_suggestions_cover_all_players_up_to_daily_capacity(self):
+        players = [player(i, 1000) for i in range(1, 13)]
+        service, _, _, _ = make_service(players)
+
+        suggestions = service.get_match_suggestions(list(range(1, 13)), 3, REFERENCE_DATE)
+
+        scheduled_ids = {
+            player_id
+            for suggestion in suggestions
+            for player_id in suggestion.team_a_ids + suggestion.team_b_ids
+        }
+        self.assertEqual(len(suggestions), 3)
+        self.assertEqual(scheduled_ids, set(range(1, 13)))
+
+    def test_global_suggestions_use_all_daily_places_when_more_than_twelve_players_attend(self):
+        players = [player(i, 1000) for i in range(1, 14)]
+        service, _, _, _ = make_service(players)
+
+        suggestions = service.get_match_suggestions(list(range(1, 14)), 3, REFERENCE_DATE)
+
+        scheduled_ids = {
+            player_id
+            for suggestion in suggestions
+            for player_id in suggestion.team_a_ids + suggestion.team_b_ids
+        }
+        self.assertEqual(len(scheduled_ids), 12)
 
     def test_global_suggestions_require_four_selected_players(self):
         service, _, match_repo, _ = make_service([player(i) for i in range(1, 5)])
