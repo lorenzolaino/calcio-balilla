@@ -6,11 +6,13 @@ from calcio_balilla.ui.state import set_notes_dismissed
 @st.dialog("🚀 What's New")
 def show_release_notes(current_version: str):
     st.markdown(f"""
-    ### Version {current_version} - Strategy & UI Overhaul
-    This major update introduces advanced planning tools and a completely redesigned responsive interface.
+    ### Version {current_version} - Daily Matchmaking
+    Plan the day's foosball session from the players who are present.
     
     **New Features & Improvements**:
-    1.  **Matchmaking**: Suggests balanced 2vs2 matches while rotating teammates and opponents.
+    1. **Player selection**: Choose present players directly with checkboxes; no need to select "Who are you?".
+    2. **Daily schedule**: Generates up to three balanced 2v2 matches, prioritizing a turn for every selected player where possible.
+    3. **Clearer results**: Suggestions are shown as Match 1, Match 2, and Match 3, with a notice when more than 12 players are selected.
     """)
     if st.button("Got it!"):
         set_notes_dismissed(True)
