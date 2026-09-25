@@ -19,5 +19,5 @@ def show_calendar(l_id, can_manage):
         st.dataframe(
             [format_future_match_row(record) for record in future_matches],
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )

@@ -23,7 +23,7 @@ def show_leaderboard(l_id, l_name):
     ], hide_index=True, column_config={
         "Win %": st.column_config.NumberColumn(format="%.1f%%"),
         "Rating": st.column_config.NumberColumn(format="%.1f")
-    }, use_container_width=True)
+    }, width="stretch")
 
 def show_elo_trends(l_id):
     st.subheader("📈 Player Elo Trends")
@@ -54,4 +54,4 @@ def show_elo_trends(l_id):
             tooltip=["player", "rating", "created_at"]
         ).add_params(selection).properties(height=400)
 
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart, width="stretch")

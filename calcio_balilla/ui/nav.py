@@ -87,23 +87,23 @@ def _render_management_page(current_page, selected_l_id, selected_l_name):
 def render_sidebar(selected_l_id):
     with st.sidebar:
         st.title("Navigation")
-        if st.button("🏠 Home / Dashboard", use_container_width=True):
+        if st.button("🏠 Home / Dashboard", width="stretch"):
             _set_current_page(PAGE_HOME)
 
-        if st.button("📚 Seasons", use_container_width=True):
+        if st.button("📚 Seasons", width="stretch"):
             _set_current_page(PAGE_SEASONS)
             
         if can_manage(selected_l_id):
             st.divider()
             st.subheader("Management")
-            if st.button("➕ New Match", use_container_width=True):
+            if st.button("➕ New Match", width="stretch"):
                 _set_current_page(PAGE_NEW_MATCH)
-            if st.button("👥 Manage Players", use_container_width=True):
+            if st.button("👥 Manage Players", width="stretch"):
                 _set_current_page(PAGE_MANAGE_PLAYERS)
-            if st.button("🗑️ Delete Match", use_container_width=True):
+            if st.button("🗑️ Delete Match", width="stretch"):
                 _set_current_page(PAGE_DELETE_MATCH)
             if is_authenticated() and not is_guest_user():
-                if st.button("🛠️ Manage Season", use_container_width=True):
+                if st.button("🛠️ Manage Season", width="stretch"):
                     _set_current_page(PAGE_SEASON_ADMIN)
 
         st.divider()
@@ -113,7 +113,7 @@ def render_sidebar(selected_l_id):
         else:
             st.write("Logged in: **Guest**")
             
-        if st.button("Logout", use_container_width=True):
+        if st.button("Logout", width="stretch"):
             clear_persisted_login(get_auth_token())
             logout_user()
             return True

@@ -25,7 +25,7 @@ def _render_podium(leaderboard_data):
     st.dataframe(
         [format_leaderboard_row(index, player) for index, player in enumerate(leaderboard_data[:3])],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
     st.subheader("Bottom 3 📉")
@@ -34,7 +34,7 @@ def _render_podium(leaderboard_data):
     st.dataframe(
         [format_leaderboard_row(start_index + index, player) for index, player in enumerate(bottom_three)],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
 
@@ -63,7 +63,7 @@ def show_seasons_archive(l_id, l_name):
     st.dataframe(
         [format_leaderboard_row(index, player) for index, player in enumerate(leaderboard_data)],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
     st.subheader("Matches")
@@ -74,5 +74,5 @@ def show_seasons_archive(l_id, l_name):
     st.dataframe(
         [format_history_row(record) for record in history_data],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )

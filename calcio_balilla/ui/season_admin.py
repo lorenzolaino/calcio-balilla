@@ -21,10 +21,10 @@ def _confirm_start_next_season_dialog(leaderboard_id: int, leaderboard_name: str
 
     confirm_col, cancel_col = st.columns(2)
     with confirm_col:
-        if st.button("Confirm", type="primary", use_container_width=True, key=f"season_confirm_{leaderboard_id}"):
+        if st.button("Confirm", type="primary", width="stretch", key=f"season_confirm_{leaderboard_id}"):
             _start_next_season(leaderboard_id)
     with cancel_col:
-        if st.button("Cancel", use_container_width=True, key=f"season_cancel_{leaderboard_id}"):
+        if st.button("Cancel", width="stretch", key=f"season_cancel_{leaderboard_id}"):
             st.rerun()
 
 
@@ -50,5 +50,5 @@ def show_season_admin(l_id, l_name):
         with info_col_2:
             st.metric("Status", "Active")
 
-    if st.button("Close Current Season and Open Next", type="primary", use_container_width=True):
+    if st.button("Close Current Season and Open Next", type="primary", width="stretch"):
         _confirm_start_next_season_dialog(l_id, l_name, active_season.name)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from db import engine as default_engine
 from calcio_balilla.core.domain import Player, PlayerStandings, PlayerStats, PlayerMatchStats
 
@@ -192,7 +192,7 @@ class PlayerRepository:
             FROM players p
             JOIN player_stats ps ON p.id = ps.player_id
             WHERE p.name IN :names AND ps.leaderboard_id = :l_id AND ps.season_id = :season_id
-        """)
+        """).bindparams(bindparam("names", expanding=True))
         rows = conn.execute(fetch_query, {"names": names, "l_id": leaderboard_id, "season_id": season_id}).fetchall()
         fields = ("id", "name", "rating", "games", "wins", "losses", "goal_diff", "trend")
         return [PlayerMatchStats(**_row_dict(row, fields)) for row in rows]
@@ -205,11 +205,12 @@ class PlayerRepository:
         """), {"n1": names[0], "n2": names[1], "n3": names[2], "n4": names[3]})
 
     def ensure_player_stats_exist_for_leaderboard(self, conn, names: tuple, leaderboard_id: int, season_id: int):
-        conn.execute(text("""
+        query = text("""
             INSERT INTO player_stats (player_id, leaderboard_id, season_id)
             SELECT id, :l_id, :season_id FROM players WHERE name IN :names
             ON CONFLICT (player_id, leaderboard_id, season_id) DO NOTHING
-        """), {"names": names, "l_id": leaderboard_id, "season_id": season_id})
+        """).bindparams(bindparam("names", expanding=True))
+        conn.execute(query, {"names": names, "l_id": leaderboard_id, "season_id": season_id})
 
     def get_rating_range(self, conn, leaderboard_id: int, season_id: int):
         range_res = conn.execute(text("""
@@ -236,7 +237,7 @@ class PlayerRepository:
                 SELECT player_id, rating, games, wins, losses, goal_diff 
                 FROM player_stats 
                 WHERE player_id IN :ids AND leaderboard_id = :l_id AND season_id = :season_id
-            """),
+            """).bindparams(bindparam("ids", expanding=True)),
             {"ids": player_ids, "l_id": leaderboard_id, "season_id": season_id}
         ).fetchall()
         fields = ("player_id", "rating", "games", "wins", "losses", "goal_diff")
@@ -261,7 +262,7 @@ class PlayerRepository:
             ) t 
             WHERE rn <= 5
             GROUP BY pid
-        """)
+        """).bindparams(bindparam("ids", expanding=True))
         return conn.execute(trend_query, {"ids": player_ids, "mid": match_id, "l_id": leaderboard_id, "season_id": season_id}).fetchall()
 
     def get_active_players_ratings_games(self, leaderboard_id: int, season_id: int):

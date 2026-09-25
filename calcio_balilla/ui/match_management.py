@@ -31,7 +31,7 @@ def show_new_match(l_id):
         save_clicked = st.form_submit_button(
             "Save Match",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             disabled=st.session_state.get(saving_key, False),
         )
 
@@ -63,7 +63,7 @@ def show_delete_match(l_id):
 
     match_map = {f"[{r.date.strftime('%d/%m %H:%M')}] {r.a1}+{r.a2} vs {r.b1}+{r.b2} ({r.goals_a}-{r.goals_b})": r.id for r in history_data}
     selected = st.multiselect("Select matches to delete", list(match_map.keys()))
-    if st.button("Delete Selected", type="primary", use_container_width=True):
+    if st.button("Delete Selected", type="primary", width="stretch"):
         if not selected:
             st.warning("Please select at least one match.")
         else:

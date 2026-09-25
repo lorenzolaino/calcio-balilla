@@ -16,7 +16,7 @@ def show_login_page():
             
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("Login", use_container_width=True, type="primary"):
+                if st.button("Login", width="stretch", type="primary"):
                     user = get_app().check_login(username, password)
                     if user:
                         persist_login(user.id)
@@ -30,7 +30,7 @@ def show_login_page():
                     else:
                         st.error("Login failed")
             with col2:
-                if st.button("Continue as Guest", use_container_width=True):
+                if st.button("Continue as Guest", width="stretch"):
                     persist_login()
                     set_guest_user()
                     return

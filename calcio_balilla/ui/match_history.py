@@ -21,5 +21,5 @@ def show_match_history(l_id):
         st.dataframe(
             [format_history_row(record) for record in history_data],
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
