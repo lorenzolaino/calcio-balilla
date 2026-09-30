@@ -45,7 +45,7 @@ def show_manage_players(l_id, l_name):
                 "Name": st.column_config.TextColumn(disabled=True)
             }, 
             hide_index=True, 
-            width="stretch"
+            use_container_width=True
         )
         if not edited.equals(df_p):
             changed = edited[edited["Active"] != df_p["Active"]]

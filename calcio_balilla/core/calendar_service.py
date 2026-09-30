@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import itertools
 import random
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # Python 3.8
+    from backports.zoneinfo import ZoneInfo
 
 from db import engine as default_engine
 

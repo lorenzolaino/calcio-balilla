@@ -1,4 +1,5 @@
 streamlit
+backports.zoneinfo; python_version < "3.9"
 sqlalchemy
 psycopg2-binary
 psycopg[binary]
