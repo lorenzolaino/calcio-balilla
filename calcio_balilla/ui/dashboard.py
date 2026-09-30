@@ -3,6 +3,8 @@ import altair as alt
 from calcio_balilla.ui.presenters import format_leaderboard_row
 from calcio_balilla.ui.services import get_app
 
+CIM_LINE = 924
+
 def show_leaderboard(l_id, l_name):
     active_season = get_app().get_active_season(l_id)
     title = "🏆 Leaderboard"
@@ -23,7 +25,7 @@ def show_leaderboard(l_id, l_name):
     ], hide_index=True, column_config={
         "Win %": st.column_config.NumberColumn(format="%.1f%%"),
         "Rating": st.column_config.NumberColumn(format="%.1f")
-    }, width="stretch")
+    }, use_container_width=True)
 
 def show_elo_trends(l_id):
     st.subheader("📈 Player Elo Trends")
@@ -54,4 +56,36 @@ def show_elo_trends(l_id):
             tooltip=["player", "rating", "created_at"]
         ).add_params(selection).properties(height=400)
 
-        st.altair_chart(chart, width="stretch")
+        st.altair_chart(chart, use_container_width=True)
+
+    _render_elo_markers(df_history)
+
+
+def _format_points(value):
+    if value is None:
+        return "—"
+    number = float(value)
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.1f}"
+
+
+def _render_elo_markers(df_history):
+    highest = None
+    lowest = None
+    if not df_history.empty:
+        highest = df_history["rating"].max()
+        lowest = df_history["rating"].min()
+
+    st.markdown(
+        f"""
+        <div style="margin-top: -20px; margin-bottom: 15px; font-size: 0.9rem; text-align: center; opacity: 0.85;">
+            <span style="margin-right: 18px;"><strong>Highest:</strong> {_format_points(highest)}</span>
+            <span style="margin-right: 18px;">•</span>
+            <span style="margin-right: 18px;"><strong>Cim Line:</strong> {CIM_LINE}</span>
+            <span style="margin-right: 18px;">•</span>
+            <span><strong>Lowest:</strong> {_format_points(lowest)}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
