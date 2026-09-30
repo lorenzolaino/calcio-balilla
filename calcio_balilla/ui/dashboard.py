@@ -71,20 +71,25 @@ def _format_points(value):
 
 
 def _render_elo_markers(df_history):
-    highest = None
-    lowest = None
-    if not df_history.empty:
-        highest = df_history["rating"].max()
-        lowest = df_history["rating"].min()
+    highest_str = "—"
+    lowest_str = "—"
+    if not df_history.empty and "rating" in df_history.columns and "player" in df_history.columns:
+        max_val = df_history["rating"].max()
+        max_players = df_history[df_history["rating"] == max_val]["player"].unique()
+        highest_str = f"{_format_points(max_val)} ({', '.join(max_players)})"
+
+        min_val = df_history["rating"].min()
+        min_players = df_history[df_history["rating"] == min_val]["player"].unique()
+        lowest_str = f"{_format_points(min_val)} ({', '.join(min_players)})"
 
     st.markdown(
         f"""
         <div style="margin-top: -20px; margin-bottom: 15px; font-size: 0.9rem; text-align: center; opacity: 0.85;">
-            <span style="margin-right: 18px;"><strong>Highest:</strong> {_format_points(highest)}</span>
+            <span style="margin-right: 18px;"><strong>Highest:</strong> {highest_str}</span>
             <span style="margin-right: 18px;">•</span>
             <span style="margin-right: 18px;"><strong>Cim Line:</strong> {CIM_LINE}</span>
             <span style="margin-right: 18px;">•</span>
-            <span><strong>Lowest:</strong> {_format_points(lowest)}</span>
+            <span><strong>Lowest:</strong> {lowest_str}</span>
         </div>
         """,
         unsafe_allow_html=True,
